@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 
 // --- CONFIGURATION ---
 // const DEADLINE = new Date('2026-01-26T09:00:00'); // Real Deadline
-const DEADLINE = new Date('2025-01-01T09:00:00'); // DEBUG: Past date to enable Result Input
+// const DEADLINE = new Date('2025-01-01T09:00:00'); // Removed hardcoded deadline
 
 const GAS_API_URL = 'https://script.google.com/macros/s/AKfycbxLZN2R3fG5AeckUyOWQZtg3quAbADAFb3YnlrcvMINqTs0HLZjxMNMmloIrr4SHhVzSA/exec';
 
@@ -47,6 +47,7 @@ function App() {
   const [adminPin, setAdminPin] = useState('');
   const [diceMinus, setDiceMinus] = useState('');
   const [dicePlus, setDicePlus] = useState('');
+  const [adminDeadline, setAdminDeadline] = useState('');
 
   // Fetch Data on Mount
   useEffect(() => {
@@ -73,7 +74,7 @@ function App() {
   const komatsuUsers = users.filter(u => u.category === 'k');
   const partnerUsers = users.filter(u => u.category === 'm');
 
-  const isExpired = new Date() > DEADLINE;
+  const isExpired = new Date() > new Date(globalConfig.deadline || '2026-01-26T09:00:00');
 
   // --- HANDLERS ---
 
@@ -89,16 +90,18 @@ function App() {
       body: JSON.stringify({
         type: 'config',
         dice_minus: diceMinus,
-        dice_plus: dicePlus
+        dice_plus: dicePlus,
+        deadline: adminDeadline
       })
     })
       .then(res => res.json())
       .then(result => {
         if (result.status === 'success') {
-          alert('サイコロの目を保存しました');
+          alert('設定を保存しました');
           setGlobalConfig({
             dice_minus: diceMinus,
-            dice_plus: dicePlus
+            dice_plus: dicePlus,
+            deadline: adminDeadline
           });
           setShowAdminModal(false);
         } else {
@@ -341,8 +344,9 @@ function App() {
                   )}
                   {view === 'RESULT' && (
                     <>
+                      <th className="px-2 py-4 text-center" onClick={() => handleSort('target_2026')}>Target<SortIcon column="target_2026" /></th>
                       <th className="px-2 py-4 text-center text-lg">Result</th>
-                      <th className="px-2 py-4 text-center font-mono text-gray-400">Adjusted</th>
+                      <th className="px-2 py-4 text-center font-mono text-gray-400 text-xs">Mix</th>
                       <th className="px-2 py-4 text-center">Charity</th>
                     </>
                   )}
@@ -397,6 +401,9 @@ function App() {
                       )}
                       {view === 'RESULT' && (
                         <>
+                          <td className="px-2 py-4 text-center font-bold text-[#0090DA] text-lg font-mono">
+                            {u.target_2026 || '-'}
+                          </td>
                           <td className="px-2 py-4 text-center font-mono text-xl text-white font-black bg-white/5 rounded">
                             {u.result_2026 || '-'}
                           </td>
@@ -405,7 +412,7 @@ function App() {
                           </td>
                           <td className="px-2 py-4 text-center">
                             {charity !== null ? (
-                              <span className="text-yellow-400 font-bold font-mono">¥{charity.toLocaleString()}</span>
+                              <span className="text-yellow-400 font-bold font-mono text-sm">¥{charity.toLocaleString()}</span>
                             ) : (
                               <span className="text-gray-600">-</span>
                             )}
@@ -738,6 +745,7 @@ function App() {
           onClick={() => {
             setDiceMinus(globalConfig.dice_minus || '');
             setDicePlus(globalConfig.dice_plus || '');
+            setAdminDeadline(globalConfig.deadline || '2026-01-26T09:00');
             setShowAdminModal(true);
           }}
           className="bg-black/50 text-white text-xs px-2 py-1 rounded border border-white/20"
@@ -772,6 +780,16 @@ function App() {
                   onChange={(e) => setDicePlus(e.target.value)}
                   className="w-full bg-black/30 border border-green-900 rounded p-2 text-white font-mono text-xl text-center"
                   placeholder="Plus"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs text-gray-400 block mb-1">DEADLINE (YYYY-MM-DDTHH:mm)</label>
+                <input
+                  type="datetime-local"
+                  value={adminDeadline}
+                  onChange={(e) => setAdminDeadline(e.target.value)}
+                  className="w-full bg-black/30 border border-blue-900 rounded p-2 text-white font-mono text-sm text-center"
                 />
               </div>
 

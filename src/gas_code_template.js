@@ -71,6 +71,7 @@ function doPost(e) {
             const configData = [];
             if (params.dice_minus !== undefined) configData.push(['dice_minus', params.dice_minus]);
             if (params.dice_plus !== undefined) configData.push(['dice_plus', params.dice_plus]);
+            if (params.deadline !== undefined) configData.push(['deadline', params.deadline]);
 
             if (configData.length > 0) {
                 configSheet.getRange(1, 1, configData.length, 2).setValues(configData);
