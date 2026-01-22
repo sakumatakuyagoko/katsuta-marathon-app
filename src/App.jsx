@@ -1,0 +1,549 @@
+import React, { useState, useEffect } from 'react';
+// import { MOCK_DATA } from './mockData'; // Mock data no longer used
+
+// --- CONFIGURATION ---
+const DEADLINE = new Date('2026-01-26T09:00:00');
+const GAS_API_URL = 'https://script.google.com/macros/s/AKfycbxLZN2R3fG5AeckUyOWQZtg3quAbADAFb3YnlrcvMINqTs0HLZjxMNMmloIrr4SHhVzSA/exec';
+
+// Williams F1 Inspired Colors
+const THEME = {
+  bg: 'bg-[#001026]', // Deep Navy
+  card: 'bg-[#0B1E38]',
+  komatsu: {
+    primary: 'border-[#0090DA]', // Electric Blue
+    bg: 'bg-[#0090DA]/10',
+    text: 'text-[#0090DA]',
+    button: 'bg-[#0090DA] hover:bg-[#34B6F3]'
+  },
+  partner: {
+    primary: 'border-[#00D060]', // Neon Green
+    bg: 'bg-[#00D060]/10',
+    text: 'text-[#00D060]',
+    button: 'bg-[#00D060] hover:bg-[#40F080]'
+  }
+};
+
+function App() {
+  const [view, setView] = useState('TOP'); // 'TOP' | 'SUMMARY'
+  const [users, setUsers] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedParticipant, setSelectedParticipant] = useState(null);
+
+  // Data State
+  const [targetTime, setTargetTime] = useState('');
+  const [resultTime, setResultTime] = useState('');
+
+  // UI State
+  const [showFinalAnswerModal, setShowFinalAnswerModal] = useState(false);
+  const [successMessage, setSuccessMessage] = useState(null); // New state for success popup
+  const [isLocked, setIsLocked] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+
+  // Fetch Data on Mount
+  useEffect(() => {
+    fetch(GAS_API_URL)
+      .then(res => res.json())
+      .then(data => {
+        setUsers(data);
+        setLoading(false);
+      })
+      .catch(err => {
+        console.error("Fetch Error:", err);
+        alert("データの読み込みに失敗しました");
+        setLoading(false);
+      });
+  }, []);
+
+  const komatsuUsers = users.filter(u => u.category === 'k');
+  const partnerUsers = users.filter(u => u.category === 'm');
+
+  const isExpired = new Date() > DEADLINE;
+
+  // --- HANDLERS ---
+
+  const handleSelectUser = (participant) => {
+    if (!participant) return;
+    openDetail(participant);
+  };
+
+  const openDetail = (participant) => {
+    setSelectedParticipant(participant);
+    // Initialize Target
+    setTargetTime(participant.target_2026 || '60');
+    setResultTime(participant.result_2026 || '');
+    setIsLocked(!!participant.locked); // Use real locked status
+  };
+
+  const handleCloseDetail = () => {
+    setSelectedParticipant(null);
+    setTargetTime('');
+    setResultTime('');
+    setShowFinalAnswerModal(false);
+    setSuccessMessage(null);
+  };
+
+  const handleCloseSuccess = () => {
+    setSuccessMessage(null);
+    handleCloseDetail();
+  };
+
+  const handleSaveClick = () => {
+    setShowFinalAnswerModal(true);
+  };
+
+  const handleFinalConfirm = () => {
+    setIsSaving(true);
+
+    const payload = {
+      id: selectedParticipant.id,
+      // Send target/locked OR result depending on expiry
+      ...(isExpired
+        ? { result_2026: resultTime }
+        : { target_2026: targetTime, locked: true }
+      )
+    };
+
+    // Use mode: 'no-cors' for GAS simple triggers if needed, but 'cors' is better if GAS returns headers.
+    // Try standard CORS first since we set textOutput.
+    fetch(GAS_API_URL, {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    })
+      .then(response => response.json())
+      .then(result => {
+        if (result.status === 'success') {
+          const msg = isExpired
+            ? `${selectedParticipant.name}さんの結果を保存しました`
+            : "目標受け付けました！頑張って！";
+
+          // Update local state to reflect changes immediately
+          setUsers(prev => prev.map(u => {
+            if (u.id === payload.id) {
+              return { ...u, ...payload };
+            }
+            return u;
+          }));
+
+          setIsLocked(true);
+          setShowFinalAnswerModal(false);
+          setSuccessMessage(msg); // Show success modal instead of alert
+          // handleCloseDetail(); // Wait for user to click OK in success modal
+        } else {
+          alert('保存エラー: ' + result.message);
+        }
+      })
+      .catch(error => {
+        console.error('Error:', error);
+        alert('通信エラーが発生しました。保存できていない可能性があります。');
+      })
+      .finally(() => {
+        setIsSaving(false);
+      });
+  };
+
+  // Column I (temp_2026) is the source of truth. Empty = Participating.
+  // We also accept '参加' or 'フル' just in case.
+  const isParticipating = !selectedParticipant?.temp_2026 || selectedParticipant?.temp_2026 === '参加' || selectedParticipant?.temp_2026 === 'フル';
+
+
+  // --- SUMMARY SORTING STATE ---
+  const [sortConfig, setSortConfig] = useState({ key: 'id', direction: 'asc' });
+
+  const handleSort = (key) => {
+    let direction = 'asc';
+    if (sortConfig.key === key && sortConfig.direction === 'asc') {
+      direction = 'desc';
+    } else if (sortConfig.key === key && sortConfig.direction === 'desc') {
+      setSortConfig({ key: 'id', direction: 'asc' });
+      return;
+    }
+    setSortConfig({ key, direction });
+  };
+
+  const getEnthusiasmIcon = (u) => {
+    if (!u.average || !u.target_2026) return null;
+    const avg = parseFloat(u.average);
+    const target = parseFloat(u.target_2026);
+    if (isNaN(target)) return null;
+
+    const diff = avg - target;
+
+    // Using simple text for now to match the "Design" request, but icons are fine
+    if (diff >= 10) return <span title="超本気！">🔥🔥🔥</span>;
+    if (diff >= 0) return <span title="やる気あり！">🔥</span>;
+    return (
+      <span title="安全第一" className="inline-flex items-center justify-center">
+        <img src="/safety-first.png" alt="安全第一" className="w-6 h-6 object-contain" />
+      </span>
+    );
+  };
+
+  const sortedData = [...users].sort((a, b) => { // Use 'users' instead of MOCK_DATA
+    const key = sortConfig.key || 'id';
+    const valA = key === 'average' ? (parseFloat(a.average) || 9999)
+      : key === 'target_2026' ? (parseFloat(a.target_2026) || 9999)
+        : a[key];
+    const valB = key === 'average' ? (parseFloat(b.average) || 9999)
+      : key === 'target_2026' ? (parseFloat(b.target_2026) || 9999)
+        : b[key];
+
+    if (valA < valB) return sortConfig.direction === 'asc' ? -1 : 1;
+    if (valA > valB) return sortConfig.direction === 'asc' ? 1 : -1;
+    return 0;
+  });
+
+  const SortIcon = ({ column }) => {
+    if (sortConfig.key !== column) return <span className="text-gray-600 ml-1">⇅</span>;
+    return sortConfig.direction === 'asc' ? <span className="text-blue-400 ml-1">↑</span> : <span className="text-blue-400 ml-1">↓</span>;
+  };
+
+
+  // --- RENDERERS ---
+
+  if (loading) {
+    return (
+      <div className={`min-h-screen ${THEME.bg} flex items-center justify-center text-white`}>
+        <div className="text-center">
+          <div className="w-16 h-16 border-4 border-blue-500 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="font-bold tracking-widest animate-pulse">LOADING DATA...</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (view === 'SUMMARY') {
+    return (
+      <div className={`min-h-screen ${THEME.bg} text-white p-4 font-sans`}>
+        <div className="max-w-6xl mx-auto bg-[#0B1E38] rounded-3xl shadow-2xl overflow-hidden border border-blue-900/30">
+          <div className="bg-[#051426] p-6 flex justify-between items-center sticky top-0 z-10 border-b border-blue-900/50">
+            <div>
+              <h2 className="text-2xl font-black italic tracking-wider text-white">
+                <span className="text-[#0090DA]">WILLIAMS</span> RACING STYLE
+              </h2>
+              <p className="text-sm text-gray-400 font-bold">PARTICIPANT LIST // 2026</p>
+            </div>
+            <button onClick={() => setView('TOP')} className="bg-[#0090DA] hover:bg-[#34B6F3] text-white px-6 py-2 rounded-full text-sm font-bold transition-all shadow-lg shadow-blue-900/50">
+              BACK TO TOP
+            </button>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm text-left">
+              <thead className="text-xs text-blue-300 uppercase bg-[#08182E] border-b border-blue-900 cursor-pointer select-none">
+                <tr>
+                  <th className="px-4 py-4" onClick={() => handleSort('id')}>No. <SortIcon column="id" /></th>
+                  <th className="px-4 py-4" onClick={() => handleSort('name')}>Name <SortIcon column="name" /></th>
+                  <th className="px-4 py-4" onClick={() => handleSort('category')}>Team <SortIcon column="category" /></th>
+                  <th className="px-4 py-4 text-center" onClick={() => handleSort('average')}>Avg Time <SortIcon column="average" /></th>
+                  <th className="px-4 py-4 text-center" onClick={() => handleSort('target_2026')}>Target <SortIcon column="target_2026" /></th>
+                  <th className="px-4 py-4 text-center">Spirit</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-blue-900/30 text-gray-300">
+                {sortedData.map((u) => (
+                  <tr key={u.id} className="hover:bg-white/5 transition-colors">
+                    <td className="px-4 py-4 font-mono text-blue-500 font-bold">{String(u.id).padStart(2, '0')}</td>
+                    <td className="px-4 py-4 font-bold text-white text-base">
+                      {u.name}
+                      {u.temp_2026 && <span className="ml-2 text-xs text-gray-500 border border-gray-600 px-1 rounded">({u.temp_2026})</span>}
+                    </td>
+                    <td className="px-4 py-4">
+                      {u.category === 'k' ? (
+                        <span className="px-2 py-1 rounded text-xs font-black bg-[#0090DA] text-white tracking-wider">KOMATSU</span>
+                      ) : (
+                        <span className="px-2 py-1 rounded text-xs font-black bg-[#00D060] text-[#002010] tracking-wider">PARTNER</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-4 text-center font-mono text-xl">
+                      {u.average ? Math.round(u.average) : '-'}
+                    </td>
+                    <td className="px-4 py-4 text-center font-bold text-[#0090DA] text-2xl font-mono">
+                      {u.target_2026 || '-'}
+                    </td>
+                    <td className="px-4 py-4 text-center text-xl">
+                      {getEnthusiasmIcon(u)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className={`min-h-screen ${THEME.bg} flex flex-col items-center py-12 px-4 font-sans text-white overflow-y-auto`}>
+
+      {/* HEADER */}
+      <header className="mb-12 w-full max-w-lg text-center relative">
+        {/* Decorative elements */}
+        <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full h-32 bg-blue-500/20 blur-[100px] rounded-full -z-10"></div>
+
+        <h1 className="text-4xl md:text-5xl font-black tracking-tight leading-none mb-2 italic">
+          <span className="text-transparent bg-clip-text bg-gradient-to-r from-white via-white to-gray-400">君よ、勝田の風になれ</span>
+        </h1>
+        <div className="flex justify-center gap-6 text-xs md:text-sm font-bold text-[#0090DA] uppercase tracking-[0.2em] border-y border-[#0090DA]/30 py-2 mx-4 mt-4 bg-black/20 backdrop-blur-sm">
+          <span>KOMATSU</span>
+          <span>PRESENCE</span>
+          <span>BOOST</span>
+          <span>CLUB</span>
+        </div>
+      </header>
+
+      <div className="w-full max-w-lg space-y-8 mb-8 relative z-0">
+
+        {/* SELECTION AREA */}
+        <div className="space-y-6">
+          {/* Komatsu Selection */}
+          <div className="bg-[#0B1E38] p-1 rounded-xl shadow-[0_0_20px_rgba(0,144,218,0.15)] border border-[#0090DA]/50 relative overflow-hidden group">
+            <div className="absolute top-0 left-0 w-1 h-full bg-[#0090DA]"></div>
+            <div className="p-6">
+              <label className="block text-[#0090DA] font-black mb-3 text-xl italic flex items-center justify-between">
+                KOMATSU MEMBERS
+                <svg className="w-5 h-5 text-[#0090DA] opacity-50" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zm0 9l2.5-1.25L12 8.5l-2.5 1.25L12 11zm0 2.5l-5-2.5-5 2.5L12 22l10-8.5-5-2.5-5 2.5z" /></svg>
+              </label>
+              <select
+                className="w-full p-4 bg-[#051426] border border-blue-900 rounded-lg text-white font-bold text-lg focus:ring-2 focus:ring-[#0090DA] focus:border-transparent outline-none appearance-none cursor-pointer hover:bg-[#08182E] transition-colors"
+                onChange={(e) => {
+                  const u = komatsuUsers.find(k => k.id === parseInt(e.target.value));
+                  handleSelectUser(u);
+                  e.target.value = "";
+                }}
+                defaultValue=""
+              >
+                <option value="" disabled>名前を選択してください ▼</option>
+                {komatsuUsers.map(u => (
+                  <option key={u.id} value={u.id}>{u.name}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          {/* Partner Selection */}
+          <div className="bg-[#0B1E38] p-1 rounded-xl shadow-[0_0_20px_rgba(0,208,96,0.15)] border border-[#00D060]/50 relative overflow-hidden group">
+            <div className="absolute top-0 left-0 w-1 h-full bg-[#00D060]"></div>
+            <div className="p-6">
+              <label className="block text-[#00D060] font-black mb-3 text-xl italic flex items-center justify-between">
+                PARTNER MEMBERS
+                <svg className="w-5 h-5 text-[#00D060] opacity-50" fill="currentColor" viewBox="0 0 24 24"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" /></svg>
+              </label>
+              <select
+                className="w-full p-4 bg-[#051426] border border-green-900 rounded-lg text-white font-bold text-lg focus:ring-2 focus:ring-[#00D060] focus:border-transparent outline-none appearance-none cursor-pointer hover:bg-[#08182E] transition-colors"
+                onChange={(e) => {
+                  const u = partnerUsers.find(p => p.id === parseInt(e.target.value));
+                  handleSelectUser(u);
+                  e.target.value = "";
+                }}
+                defaultValue=""
+              >
+                <option value="" disabled>名前を選択してください ▼</option>
+                {partnerUsers.map(u => (
+                  <option key={u.id} value={u.id}>{u.name}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+      {/* SUMMARY LARGE BUTTONS */}
+      <div className="grid grid-cols-2 gap-4 w-full max-w-lg mb-8">
+        <button
+          onClick={() => setView('SUMMARY')}
+          className="group relative overflow-hidden bg-gradient-to-br from-[#0090DA] to-[#0060A0] p-6 rounded-2xl shadow-xl hover:shadow-[#0090DA]/40 hover:-translate-y-1 transition-all duration-300"
+        >
+          <div className="absolute inset-0 bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+          <p className="text-[#001026] text-xs font-black uppercase tracking-widest mb-1">VIEW LIST</p>
+          <p className="text-white text-lg md:text-xl font-black italic leading-tight">みんなの<br />意気込み</p>
+          <span className="absolute bottom-4 right-4 text-white/30 text-4xl">🔥</span>
+        </button>
+
+        <button
+          onClick={() => setView('SUMMARY')}
+          className="group relative overflow-hidden bg-gradient-to-br from-[#ffffff] to-[#e0e0e0] p-6 rounded-2xl shadow-xl hover:shadow-white/20 hover:-translate-y-1 transition-all duration-300"
+        >
+          <div className="absolute inset-0 bg-black/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
+          <p className="text-gray-500 text-xs font-black uppercase tracking-widest mb-1">VIEW RESULTS</p>
+          <p className="text-[#001026] text-lg md:text-xl font-black italic leading-tight">みんなの<br />結果</p>
+          <span className="absolute bottom-4 right-4 text-black/10 text-4xl">🏆</span>
+        </button>
+      </div>
+
+
+      {/* --- FINAL ANSWER CONFIRM MODAL --- */}
+      {showFinalAnswerModal && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 z-[60] animate-in fade-in duration-200">
+          <div className="bg-[#0B1E38] w-full max-w-sm rounded-3xl p-8 shadow-2xl border border-blue-500/30 text-center transform scale-100">
+            <h3 className="text-3xl font-black text-white italic mb-2 tracking-tighter">FINAL ANSWER?</h3>
+            <p className="text-blue-300 font-bold mb-8">
+              この内容で確定しますか？<br />
+              <span className="text-xs opacity-70">※確定後は変更できません</span>
+            </p>
+            <div className="flex gap-4">
+              <button
+                onClick={() => setShowFinalAnswerModal(false)}
+                className="flex-1 py-4 text-gray-400 font-bold hover:text-white bg-white/5 hover:bg-white/10 rounded-xl transition-colors"
+              >
+                BACK
+              </button>
+              <button
+                onClick={handleFinalConfirm}
+                className="flex-1 py-4 bg-gradient-to-r from-[#0090DA] to-[#34B6F3] text-[#001026] font-black rounded-xl shadow-[0_0_20px_rgba(0,144,218,0.4)] hover:shadow-[0_0_30px_rgba(0,144,218,0.6)] transition-all italic text-xl"
+              >
+                YES!
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* --- DETAIL MODAL --- */}
+      {selectedParticipant && (
+        <div className="fixed inset-0 bg-black/90 backdrop-blur-md flex items-center justify-center p-4 z-50 overflow-y-auto animate-in fade-in duration-200">
+          <div className={`bg-[#0B1E38] w-full max-w-sm rounded-3xl shadow-2xl my-auto overflow-hidden border-2 ${selectedParticipant.category === 'k' ? 'border-[#0090DA]' : 'border-[#00D060]'}`}>
+
+            {/* Modal Header */}
+            <div className={`p-8 text-white bg-gradient-to-br ${selectedParticipant.category === 'k' ? 'from-[#0090DA] to-[#005090]' : 'from-[#00D060] to-[#008040]'} relative`}>
+              <button onClick={handleCloseDetail} className="absolute top-4 right-4 p-2 bg-black/20 hover:bg-black/30 rounded-full text-white transition-colors">
+                <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                </svg>
+              </button>
+              <div className="inline-block px-3 py-1 rounded md:mb-2 text-[10px] font-black uppercase tracking-[0.2em] bg-black/30 text-white mb-2">
+                {selectedParticipant.category === 'k' ? 'KOMATSU RACING' : 'PARTNER TEAM'}
+              </div>
+              <h2 className="text-4xl font-black italic tracking-tight">{selectedParticipant.name}</h2>
+              {/* Detail Status Badge */}
+              {selectedParticipant.temp_2026 && (
+                <div className="mt-2 inline-block bg-black/40 text-white text-xs px-2 py-1 rounded font-bold border border-white/20">
+                  {selectedParticipant.temp_2026}
+                </div>
+              )}
+            </div>
+
+            <div className="p-8 space-y-8 bg-[#0B1E38]">
+
+              {/* History Section */}
+              <div>
+                <h3 className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em] mb-4 border-b border-gray-700 pb-2">
+                  RACE HISTORY
+                </h3>
+                <div className="grid grid-cols-5 gap-2 text-center text-sm">
+                  {['19', '20', '23', '24', '25'].map(y => (
+                    <div key={y} className="flex flex-col">
+                      <div className="text-[10px] text-gray-500 mb-1">'{y}</div>
+                      <div className={`p-2 rounded font-black font-mono ${selectedParticipant.history[`20${y}`] ? 'bg-white/10 text-white' : 'bg-white/5 text-gray-600'}`}>
+                        {selectedParticipant.history[`20${y}`] || '-'}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                {selectedParticipant.average && (
+                  <div className="mt-4 text-right text-xs text-blue-300">
+                    AVG LAP: <span className="font-black text-xl text-white font-mono">{selectedParticipant.average}</span> MIN
+                  </div>
+                )}
+              </div>
+
+              {/* Input Section */}
+              {isParticipating ? (
+                <div className="space-y-6">
+
+                  {/* TARGET TIME (Editable only BEFORE deadline) */}
+                  <div className={`relative ${isExpired ? 'opacity-30 grayscale pointer-events-none' : ''}`}>
+                    <label className="block text-sm font-bold text-gray-300 mb-2 flex justify-between items-end">
+                      <span className="italic">TARGET TIME (2026)</span>
+                      {!isExpired && !isLocked && <span className="text-[10px] text-[#0090DA] animate-pulse">EDITABLE</span>}
+                      {isLocked && <span className="text-[10px] text-red-400 font-bold">LOCKED</span>}
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="number"
+                        value={targetTime}
+                        onChange={(e) => setTargetTime(e.target.value)}
+                        disabled={isLocked}
+                        className={`w-full text-5xl font-black text-center p-6 bg-[#051426] border-2 rounded-2xl outline-none transition-all font-mono text-white ${isLocked ? 'border-gray-700 text-gray-500' : (selectedParticipant.category === 'k' ? 'border-[#0090DA] focus:shadow-[0_0_20px_rgba(0,144,218,0.3)]' : 'border-[#00D060] focus:shadow-[0_0_20px_rgba(0,208,96,0.3)]')}`}
+                      />
+                      <span className="absolute right-6 top-1/2 -translate-y-1/2 text-gray-600 font-bold text-sm tracking-widest">MIN</span>
+                    </div>
+                  </div>
+
+                  {/* RESULT TIME (Editable only AFTER deadline) */}
+                  {isExpired && (
+                    <div className="animate-in slide-in-from-bottom duration-500">
+                      <div className="bg-red-500/10 p-6 rounded-2xl border border-red-500/50">
+                        <label className="block text-sm font-black text-red-500 mb-2 text-center italic tracking-wider">
+                          OFFICIAL RESULT
+                        </label>
+                        <div className="relative">
+                          <input
+                            type="number"
+                            value={resultTime}
+                            onChange={(e) => setResultTime(e.target.value)}
+                            className="w-full text-4xl font-black text-center p-4 bg-black/50 border border-red-500/30 text-white rounded-xl outline-none focus:border-red-500 focus:shadow-[0_0_20px_rgba(239,68,68,0.3)] font-mono"
+                            autoFocus
+                          />
+                          <span className="absolute right-6 top-1/2 -translate-y-1/2 text-red-500/50 font-bold text-xs">MIN</span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Action Button */}
+                  {(!isLocked || isExpired) && (
+                    <button
+                      onClick={handleSaveClick}
+                      className={`w-full font-black py-5 px-6 rounded-xl shadow-lg transition-all active:scale-95 text-xl flex items-center justify-center gap-2 italic ${isExpired
+                        ? 'bg-gradient-to-r from-red-600 to-red-500 text-white'
+                        : (selectedParticipant.category === 'k' ? 'bg-gradient-to-r from-[#0090DA] to-[#34B6F3] text-[#001026]' : 'bg-gradient-to-r from-[#00D060] to-[#40F080] text-[#002010]')
+                        }`}
+                    >
+                      <span>{isExpired ? 'SAVE RESULT' : 'LOCK TARGET'}</span>
+                    </button>
+                  )}
+
+                  {isLocked && !isExpired && (
+                    <div className="text-center p-4 bg-white/5 rounded-xl border border-white/10">
+                      <p className="text-gray-400 text-xs">Target time is locked</p>
+                      <p className="text-white font-bold italic mt-1">SEE YOU AT THE FINISH LINE</p>
+                    </div>
+                  )}
+
+                </div>
+              ) : (
+                <div className="p-6 bg-white/5 rounded-2xl text-center border border-white/10">
+                  <p className="text-gray-400 font-medium mb-1">NO RACE ENTRY</p>
+                  <p className="text-xs text-gray-500 uppercase tracking-widest">Status: {selectedParticipant.temp_2026}</p>
+                </div>
+              )}
+
+            </div>
+          </div>
+        </div>
+      )}
+      {/* --- SUCCESS MODAL --- */}
+      {successMessage && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 z-[70] animate-in fade-in duration-200">
+          <div className="bg-[#0B1E38] w-full max-w-sm rounded-3xl p-8 shadow-2xl border border-[#0090DA] text-center transform scale-100">
+            <div className="text-6xl mb-4">👍</div>
+            <h3 className="text-2xl font-black text-white italic mb-4 tracking-tighter">SUCCESS!</h3>
+            <p className="text-white font-bold text-lg mb-8 whitespace-pre-line">
+              {successMessage}
+            </p>
+            <button
+              onClick={handleCloseSuccess}
+              className="w-full py-4 bg-gradient-to-r from-[#0090DA] to-[#34B6F3] text-[#001026] font-black rounded-xl shadow-[0_0_20px_rgba(0,144,218,0.4)] hover:shadow-[0_0_30px_rgba(0,144,218,0.6)] transition-all italic text-xl"
+            >
+              OK
+            </button>
+          </div>
+        </div>
+      )}
+
+    </div>
+  )
+}
+
+export default App
