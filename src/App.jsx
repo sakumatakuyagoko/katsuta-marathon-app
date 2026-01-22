@@ -2,7 +2,9 @@ import React, { useState, useEffect } from 'react';
 // import { MOCK_DATA } from './mockData'; // Mock data no longer used
 
 // --- CONFIGURATION ---
-const DEADLINE = new Date('2026-01-26T09:00:00');
+// const DEADLINE = new Date('2026-01-26T09:00:00'); // Real Deadline
+const DEADLINE = new Date('2025-01-01T09:00:00'); // DEBUG: Past date to enable Result Input
+
 const GAS_API_URL = 'https://script.google.com/macros/s/AKfycbxLZN2R3fG5AeckUyOWQZtg3quAbADAFb3YnlrcvMINqTs0HLZjxMNMmloIrr4SHhVzSA/exec';
 
 // Williams F1 Inspired Colors
@@ -26,6 +28,7 @@ const THEME = {
 function App() {
   const [view, setView] = useState('TOP'); // 'TOP' | 'SUMMARY'
   const [users, setUsers] = useState([]);
+  const [globalConfig, setGlobalConfig] = useState({}); // Store dice values
   const [loading, setLoading] = useState(true);
   const [selectedParticipant, setSelectedParticipant] = useState(null);
 
@@ -35,16 +38,29 @@ function App() {
 
   // UI State
   const [showFinalAnswerModal, setShowFinalAnswerModal] = useState(false);
-  const [successMessage, setSuccessMessage] = useState(null); // New state for success popup
+  const [successMessage, setSuccessMessage] = useState(null);
   const [isLocked, setIsLocked] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+
+  // Admin / Dice State
+  const [showAdminModal, setShowAdminModal] = useState(false);
+  const [adminPin, setAdminPin] = useState('');
+  const [diceMinus, setDiceMinus] = useState('');
+  const [dicePlus, setDicePlus] = useState('');
 
   // Fetch Data on Mount
   useEffect(() => {
     fetch(GAS_API_URL)
       .then(res => res.json())
       .then(data => {
-        setUsers(data);
+        // Handle new response structure { users: [], config: {} }
+        if (data.users && data.config) {
+          setUsers(data.users);
+          setGlobalConfig(data.config);
+        } else {
+          // Fallback for old response locally or if GAS not updated yet
+          setUsers(Array.isArray(data) ? data : []);
+        }
         setLoading(false);
       })
       .catch(err => {
@@ -60,6 +76,37 @@ function App() {
   const isExpired = new Date() > DEADLINE;
 
   // --- HANDLERS ---
+
+  const handleAdminSave = () => {
+    if (adminPin !== '2026') { // Simple admin PIN
+      alert('パスワードが違います');
+      return;
+    }
+
+    // Save to GAS
+    fetch(GAS_API_URL, {
+      method: 'POST',
+      body: JSON.stringify({
+        type: 'config',
+        dice_minus: diceMinus,
+        dice_plus: dicePlus
+      })
+    })
+      .then(res => res.json())
+      .then(result => {
+        if (result.status === 'success') {
+          alert('サイコロの目を保存しました');
+          setGlobalConfig({
+            dice_minus: diceMinus,
+            dice_plus: dicePlus
+          });
+          setShowAdminModal(false);
+        } else {
+          alert('保存エラー: ' + result.message);
+        }
+      })
+      .catch(err => alert('通信エラー'));
+  };
 
   const handleSelectUser = (participant) => {
     if (!participant) return;
@@ -178,6 +225,24 @@ function App() {
     );
   };
 
+  // Charity Calculation Helper
+  const calculateCharity = (u) => {
+    if (!u.result_2026 || !u.target_2026) return null;
+    const result = parseFloat(u.result_2026);
+    const target = parseFloat(u.target_2026);
+    const dMinus = parseFloat(globalConfig.dice_minus) || 0;
+    const dPlus = parseFloat(globalConfig.dice_plus) || 0;
+
+    // Formula: (Result - Dice1 + Dice2) - Target
+    const adjustedResult = result - dMinus + dPlus;
+    const diff = adjustedResult - target;
+
+    if (diff <= 0) return 0; // No charity if faster than target (after dice logic?)
+    // Or is it always charged? Usually charity penalties are for being slower. 
+    // "500円/分" -> If diff is positive (slower), pay 500 * diff.
+    return Math.ceil(diff) * 500;
+  };
+
   const sortedData = [...users].sort((a, b) => { // Use 'users' instead of MOCK_DATA
     const key = sortConfig.key || 'id';
     const valA = key === 'average' ? (parseFloat(a.average) || 9999)
@@ -212,16 +277,47 @@ function App() {
   }
 
   if (view === 'SUMMARY') {
+    // Filter out non-participants/no-entry for the list
+    const filteredUsers = sortedData.filter(u => {
+      // Logic: Must be Participating.
+      // Reuse the logic: !temp_2026 OR '参加' OR 'フル'
+      return !u.temp_2026 || u.temp_2026 === '参加' || u.temp_2026 === 'フル';
+    });
+
+    const totalCharitySum = filteredUsers.reduce((sum, u) => {
+      const c = calculateCharity(u);
+      return sum + (c || 0);
+    }, 0);
+
     return (
       <div className={`min-h-screen ${THEME.bg} text-white p-4 font-sans`}>
         <div className="max-w-6xl mx-auto bg-[#0B1E38] rounded-3xl shadow-2xl overflow-hidden border border-blue-900/30">
-          <div className="bg-[#051426] p-6 flex justify-between items-center sticky top-0 z-10 border-b border-blue-900/50">
+          <div className="bg-[#051426] p-6 flex flex-col md:flex-row justify-between items-center sticky top-0 z-10 border-b border-blue-900/50 gap-4">
             <div>
               <h2 className="text-2xl font-black italic tracking-wider text-white">
                 <span className="text-[#0090DA]">WILLIAMS</span> RACING STYLE
               </h2>
               <p className="text-sm text-gray-400 font-bold">PARTICIPANT LIST // 2026</p>
+
+              {/* Dice Display for everyone */}
+              {(globalConfig.dice_minus || globalConfig.dice_plus) && (
+                <div className="mt-2 flex gap-4 text-xs font-mono bg-white/5 p-2 rounded inline-flex">
+                  <span className="text-red-400">DICE1: -{globalConfig.dice_minus || 0}</span>
+                  <span className="text-green-400">DICE2: +{globalConfig.dice_plus || 0}</span>
+                  <span className="text-blue-300 border-l border-gray-600 pl-4 ml-2">
+                    TOTAL: {(parseInt(globalConfig.dice_plus || 0) - parseInt(globalConfig.dice_minus || 0)) > 0 ? '+' : ''}
+                    {parseInt(globalConfig.dice_plus || 0) - parseInt(globalConfig.dice_minus || 0)}
+                  </span>
+                </div>
+              )}
             </div>
+
+            {/* TOTAL CHARITY DISPLAY */}
+            <div className="bg-gradient-to-r from-yellow-600/20 to-yellow-500/10 border border-yellow-500/30 px-6 py-2 rounded-xl text-center">
+              <p className="text-[10px] text-yellow-500 uppercase tracking-widest font-bold">TOTAL CHARITY</p>
+              <p className="text-3xl font-black text-yellow-400 font-mono">¥{totalCharitySum.toLocaleString()}</p>
+            </div>
+
             <button onClick={() => setView('TOP')} className="bg-[#0090DA] hover:bg-[#34B6F3] text-white px-6 py-2 rounded-full text-sm font-bold transition-all shadow-lg shadow-blue-900/50">
               BACK TO TOP
             </button>
@@ -230,40 +326,63 @@ function App() {
             <table className="w-full text-sm text-left">
               <thead className="text-xs text-blue-300 uppercase bg-[#08182E] border-b border-blue-900 cursor-pointer select-none">
                 <tr>
-                  <th className="px-4 py-4" onClick={() => handleSort('id')}>No. <SortIcon column="id" /></th>
-                  <th className="px-4 py-4" onClick={() => handleSort('name')}>Name <SortIcon column="name" /></th>
-                  <th className="px-4 py-4" onClick={() => handleSort('category')}>Team <SortIcon column="category" /></th>
-                  <th className="px-4 py-4 text-center" onClick={() => handleSort('average')}>Avg Time <SortIcon column="average" /></th>
-                  <th className="px-4 py-4 text-center" onClick={() => handleSort('target_2026')}>Target <SortIcon column="target_2026" /></th>
-                  <th className="px-4 py-4 text-center">Spirit</th>
+                  <th className="px-2 py-4 w-12" onClick={() => handleSort('id')}>No.<SortIcon column="id" /></th>
+                  <th className="px-2 py-4" onClick={() => handleSort('name')}>Name<SortIcon column="name" /></th>
+                  <th className="px-2 py-4 w-16 text-center" onClick={() => handleSort('category')}>Team<SortIcon column="category" /></th>
+                  <th className="px-2 py-4 text-center" onClick={() => handleSort('target_2026')}>Target<SortIcon column="target_2026" /></th>
+                  <th className="px-2 py-4 text-center text-lg">Result</th>
+                  <th className="px-2 py-4 text-center font-mono text-gray-400">Adjusted</th>
+                  <th className="px-2 py-4 text-center">Charity</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-blue-900/30 text-gray-300">
-                {sortedData.map((u) => (
-                  <tr key={u.id} className="hover:bg-white/5 transition-colors">
-                    <td className="px-4 py-4 font-mono text-blue-500 font-bold">{String(u.id).padStart(2, '0')}</td>
-                    <td className="px-4 py-4 font-bold text-white text-base">
-                      {u.name}
-                      {u.temp_2026 && <span className="ml-2 text-xs text-gray-500 border border-gray-600 px-1 rounded">({u.temp_2026})</span>}
-                    </td>
-                    <td className="px-4 py-4">
-                      {u.category === 'k' ? (
-                        <span className="px-2 py-1 rounded text-xs font-black bg-[#0090DA] text-white tracking-wider">KOMATSU</span>
-                      ) : (
-                        <span className="px-2 py-1 rounded text-xs font-black bg-[#00D060] text-[#002010] tracking-wider">PARTNER</span>
-                      )}
-                    </td>
-                    <td className="px-4 py-4 text-center font-mono text-xl">
-                      {u.average ? Math.round(u.average) : '-'}
-                    </td>
-                    <td className="px-4 py-4 text-center font-bold text-[#0090DA] text-2xl font-mono">
-                      {u.target_2026 || '-'}
-                    </td>
-                    <td className="px-4 py-4 text-center text-xl">
-                      {getEnthusiasmIcon(u)}
-                    </td>
-                  </tr>
-                ))}
+                {filteredUsers.map((u) => {
+                  const charity = calculateCharity(u);
+
+                  // Calculate Adjusted Time for display
+                  let adjustedTime = '-';
+                  if (u.result_2026 && u.result_2026 !== 'リタイア') {
+                    const res = parseFloat(u.result_2026);
+                    const dm = parseFloat(globalConfig.dice_minus) || 0;
+                    const dp = parseFloat(globalConfig.dice_plus) || 0;
+                    adjustedTime = res - dm + dp;
+                  } else if (u.result_2026 === 'リタイア') {
+                    adjustedTime = 'DNF';
+                  }
+
+                  return (
+                    <tr key={u.id} className="hover:bg-white/5 transition-colors">
+                      <td className="px-2 py-4 font-mono text-blue-500 font-bold">{String(u.id).padStart(2, '0')}</td>
+                      <td className="px-2 py-4 font-bold text-white text-base">
+                        {u.name}
+                        {u.temp_2026 && <span className="ml-2 text-[10px] text-gray-500 border border-gray-600 px-1 rounded">({u.temp_2026})</span>}
+                      </td>
+                      <td className="px-2 py-4 text-center">
+                        {u.category === 'k' ? (
+                          <span className="px-1 py-1 rounded text-[10px] font-black bg-[#0090DA] text-white tracking-tighter">K</span>
+                        ) : (
+                          <span className="px-1 py-1 rounded text-[10px] font-black bg-[#00D060] text-[#002010] tracking-tighter">P</span>
+                        )}
+                      </td>
+                      <td className="px-2 py-4 text-center font-bold text-[#0090DA] text-xl font-mono">
+                        {u.target_2026 || '-'}
+                      </td>
+                      <td className="px-2 py-4 text-center font-mono text-xl text-white font-black bg-white/5 rounded">
+                        {u.result_2026 || '-'}
+                      </td>
+                      <td className="px-2 py-4 text-center font-mono text-lg text-gray-400">
+                        {adjustedTime}
+                      </td>
+                      <td className="px-2 py-4 text-center">
+                        {charity !== null ? (
+                          <span className="text-yellow-400 font-bold font-mono">¥{charity.toLocaleString()}</span>
+                        ) : (
+                          <span className="text-gray-600">-</span>
+                        )}
+                      </td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </div>
@@ -276,19 +395,54 @@ function App() {
     <div className={`min-h-screen ${THEME.bg} flex flex-col items-center py-12 px-4 font-sans text-white overflow-y-auto`}>
 
       {/* HEADER */}
-      <header className="mb-12 w-full max-w-lg text-center relative">
+      <header className="mb-6 w-full max-w-lg text-center relative">
         {/* Decorative elements */}
         <div className="absolute top-0 left-1/2 -translate-x-1/2 w-full h-32 bg-blue-500/20 blur-[100px] rounded-full -z-10"></div>
 
         <h1 className="text-4xl md:text-5xl font-black tracking-tight leading-none mb-2 italic">
-          <span className="text-transparent bg-clip-text bg-gradient-to-r from-white via-white to-gray-400">君よ、勝田の風になれ</span>
+          <span className="text-transparent bg-clip-text bg-gradient-to-r from-white via-white to-gray-400">君よ、勝田の風になれ！</span>
         </h1>
-        <div className="flex justify-center gap-6 text-xs md:text-sm font-bold text-[#0090DA] uppercase tracking-[0.2em] border-y border-[#0090DA]/30 py-2 mx-4 mt-4 bg-black/20 backdrop-blur-sm">
-          <span>KOMATSU</span>
-          <span>PRESENCE</span>
-          <span>BOOST</span>
-          <span>CLUB</span>
+        <div className="flex justify-between items-center text-xs md:text-sm font-bold text-[#0090DA] uppercase tracking-[0.2em] border-y border-[#0090DA]/30 py-2 mx-4 mt-4 bg-black/20 backdrop-blur-sm px-4">
+          <div className="flex gap-2 md:gap-4 text-left">
+            <span>KOMATSU</span>
+            <span>PRESENCE</span>
+            <span>BOOST</span>
+            <span>CLUB</span>
+          </div>
+          <div className="flex items-center gap-1 opacity-80 shrink-0 ml-4">
+            <span className="text-[8px] text-white/50 tracking-normal normal-case font-sans">powered by Jasmine</span>
+            <img src="/jasmine-logo.png" alt="Jasmine" className="h-6 w-6 object-contain" />
+          </div>
         </div>
+
+        {/* TOP SCREEN DICE DISPLAY: ROW LAYOUT */}
+        {(globalConfig.dice_minus || globalConfig.dice_plus) && (
+          <div className="mt-6 mx-2 flex justify-center items-stretch gap-2 md:gap-4 animate-in fade-in slide-in-from-top-4 duration-700">
+            {/* Harada */}
+            <div className="bg-gradient-to-br from-red-900/40 to-red-600/10 border border-red-500/30 px-4 py-4 rounded-xl text-center shadow-[0_0_30px_rgba(220,38,38,0.2)] flex-1">
+              <p className="text-[10px] text-red-300 uppercase tracking-widest mb-2 font-bold whitespace-nowrap">Harada</p>
+              <p className="text-4xl md:text-5xl font-black text-white font-mono leading-none tracking-tighter">-{globalConfig.dice_minus || 0}</p>
+            </div>
+
+            {/* Yanagisawa */}
+            <div className="bg-gradient-to-br from-green-900/40 to-green-600/10 border border-green-500/30 px-4 py-4 rounded-xl text-center shadow-[0_0_30px_rgba(34,197,94,0.2)] flex-1">
+              <p className="text-[10px] text-green-300 uppercase tracking-widest mb-2 font-bold whitespace-nowrap">Yanagisawa</p>
+              <p className="text-4xl md:text-5xl font-black text-white font-mono leading-none tracking-tighter">+{globalConfig.dice_plus || 0}</p>
+            </div>
+
+            {/* Total */}
+            <div className="bg-gradient-to-br from-blue-900/40 to-blue-600/10 border border-blue-500/30 px-4 py-4 rounded-xl text-center shadow-[0_0_30px_rgba(59,130,246,0.3)] flex-1 flex flex-col justify-center">
+              <p className="text-[10px] text-blue-300 uppercase tracking-widest mb-1 font-bold whitespace-nowrap">TOTAL</p>
+              <div className="flex items-baseline justify-center gap-1">
+                <span className="text-4xl md:text-5xl font-black text-white font-mono leading-none tracking-tighter">
+                  {(parseInt(globalConfig.dice_plus || 0) - parseInt(globalConfig.dice_minus || 0)) > 0 ? '+' : ''}
+                  {parseInt(globalConfig.dice_plus || 0) - parseInt(globalConfig.dice_minus || 0)}
+                </span>
+                <span className="text-xs text-blue-300 font-bold">MIN</span>
+              </div>
+            </div>
+          </div>
+        )}
       </header>
 
       <div className="w-full max-w-lg space-y-8 mb-8 relative z-0">
@@ -472,21 +626,44 @@ function App() {
 
                   {/* RESULT TIME (Editable only AFTER deadline) */}
                   {isExpired && (
-                    <div className="animate-in slide-in-from-bottom duration-500">
+                    <div className="animate-in slide-in-from-bottom duration-500 space-y-4">
                       <div className="bg-red-500/10 p-6 rounded-2xl border border-red-500/50">
                         <label className="block text-sm font-black text-red-500 mb-2 text-center italic tracking-wider">
                           OFFICIAL RESULT
                         </label>
-                        <div className="relative">
-                          <input
-                            type="number"
-                            value={resultTime}
-                            onChange={(e) => setResultTime(e.target.value)}
-                            className="w-full text-4xl font-black text-center p-4 bg-black/50 border border-red-500/30 text-white rounded-xl outline-none focus:border-red-500 focus:shadow-[0_0_20px_rgba(239,68,68,0.3)] font-mono"
-                            autoFocus
-                          />
-                          <span className="absolute right-6 top-1/2 -translate-y-1/2 text-red-500/50 font-bold text-xs">MIN</span>
+
+                        {/* Retire Toggle */}
+                        <div className="flex justify-center mb-4">
+                          <label className="flex items-center gap-2 cursor-pointer bg-red-900/30 px-3 py-1 rounded-full border border-red-500/30">
+                            <input
+                              type="checkbox"
+                              className="accent-red-500"
+                              checked={resultTime === 'リタイア'}
+                              onChange={(e) => {
+                                setResultTime(e.target.checked ? 'リタイア' : '');
+                              }}
+                            />
+                            <span className="text-white text-xs font-bold">途中棄権 (RETIRE)</span>
+                          </label>
                         </div>
+
+                        {resultTime !== 'リタイア' ? (
+                          <div className="relative">
+                            <input
+                              type="number"
+                              value={resultTime}
+                              onChange={(e) => setResultTime(e.target.value)}
+                              className="w-full text-4xl font-black text-center p-4 bg-black/50 border border-red-500/30 text-white rounded-xl outline-none focus:border-red-500 focus:shadow-[0_0_20px_rgba(239,68,68,0.3)] font-mono"
+                              autoFocus
+                              placeholder="000"
+                            />
+                            <span className="absolute right-6 top-1/2 -translate-y-1/2 text-red-500/50 font-bold text-xs">MIN</span>
+                          </div>
+                        ) : (
+                          <div className="w-full text-4xl font-black text-center p-4 bg-black/50 border border-gray-500 text-gray-400 rounded-xl font-mono">
+                            RETIRED
+                          </div>
+                        )}
                       </div>
                     </div>
                   )}
@@ -523,6 +700,78 @@ function App() {
           </div>
         </div>
       )}
+      {/* ADMIN BUTTON (Footer) */}
+      <div className="fixed bottom-4 right-4 z-10 opacity-30 hover:opacity-100 transition-opacity">
+        <button
+          onClick={() => {
+            setDiceMinus(globalConfig.dice_minus || '');
+            setDicePlus(globalConfig.dice_plus || '');
+            setShowAdminModal(true);
+          }}
+          className="bg-black/50 text-white text-xs px-2 py-1 rounded border border-white/20"
+        >
+          ⚙️
+        </button>
+      </div>
+
+      {/* --- ADMIN MODAL --- */}
+      {showAdminModal && (
+        <div className="fixed inset-0 bg-black/90 backdrop-blur-md flex items-center justify-center p-4 z-[80]">
+          <div className="bg-[#0B1E38] w-full max-w-sm rounded-2xl p-6 border border-gray-700">
+            <h3 className="text-xl font-bold text-white mb-4">Admin Config</h3>
+
+            <div className="space-y-4">
+              <div>
+                <label className="text-xs text-gray-400 block mb-1">DICE 1 (原田) - TIME REDUCTION</label>
+                <input
+                  type="number"
+                  value={diceMinus}
+                  onChange={(e) => setDiceMinus(e.target.value)}
+                  className="w-full bg-black/30 border border-red-900 rounded p-2 text-white font-mono text-xl text-center"
+                  placeholder="Minus"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs text-gray-400 block mb-1">DICE 2 (柳沢) - TIME ADDITION</label>
+                <input
+                  type="number"
+                  value={dicePlus}
+                  onChange={(e) => setDicePlus(e.target.value)}
+                  className="w-full bg-black/30 border border-green-900 rounded p-2 text-white font-mono text-xl text-center"
+                  placeholder="Plus"
+                />
+              </div>
+
+              <div className="pt-4 border-t border-gray-700">
+                <label className="text-xs text-gray-400 block mb-1">ADMIN PASSWORD</label>
+                <input
+                  type="password"
+                  value={adminPin}
+                  onChange={(e) => setAdminPin(e.target.value)}
+                  className="w-full bg-black/30 border border-gray-600 rounded p-2 text-white text-center"
+                />
+              </div>
+
+              <div className="flex gap-2 pt-2">
+                <button
+                  onClick={() => setShowAdminModal(false)}
+                  className="flex-1 py-2 bg-gray-700 rounded text-gray-300 text-sm"
+                >
+                  CANCEL
+                </button>
+                <button
+                  onClick={handleAdminSave}
+                  className="flex-1 py-2 bg-blue-600 rounded text-white font-bold text-sm"
+                >
+                  SAVE CONFIG
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* --- SUCCESS MODAL --- */}
       {successMessage && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 z-[70] animate-in fade-in duration-200">

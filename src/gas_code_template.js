@@ -19,16 +19,30 @@ const HEADERS = [
     'locked'       // Q列
 ];
 
+const CONFIG_SHEET_NAME = 'config';
+
 function doGet(e) {
-    const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const sheet = ss.getSheetByName(SHEET_NAME);
+    const configSheet = ss.getSheetByName(CONFIG_SHEET_NAME);
+
+    // データ取得
     const data = sheet.getDataRange().getValues();
-    const headers = data.shift(); // ヘッダー行を除去（もし1行目がヘッダーなら）
+    const headers = data.shift(); // ヘッダー除去
+
+    // Config取得
+    let config = {};
+    if (configSheet) {
+        const configData = configSheet.getDataRange().getValues();
+        configData.forEach(row => {
+            if (row[0]) config[row[0]] = row[1];
+        });
+    }
 
     // JSON形式に変換
     const users = data.map(row => {
         let user = { history: {} };
         HEADERS.forEach((key, index) => {
-            // 過去記録は history オブジェクトにまとめる
             if (['2019', '2020', '2023', '2024', '2025'].includes(key)) {
                 user.history[key] = row[index];
             } else {
@@ -38,56 +52,74 @@ function doGet(e) {
         return user;
     });
 
-    return ContentService.createTextOutput(JSON.stringify(users))
+    return ContentService.createTextOutput(JSON.stringify({ users: users, config: config }))
         .setMimeType(ContentService.MimeType.JSON);
 }
 
 function doPost(e) {
     try {
         const params = JSON.parse(e.postData.contents);
+        const ss = SpreadsheetApp.getActiveSpreadsheet();
+
+        // Config更新の場合
+        if (params.type === 'config') {
+            const configSheet = ss.getSheetByName(CONFIG_SHEET_NAME);
+            if (!configSheet) return errorResponse('Config sheet not found');
+
+            // シンプルに全クリアして書き直す（行数が少ないので）
+            configSheet.clear();
+            const configData = [];
+            if (params.dice_minus !== undefined) configData.push(['dice_minus', params.dice_minus]);
+            if (params.dice_plus !== undefined) configData.push(['dice_plus', params.dice_plus]);
+
+            if (configData.length > 0) {
+                configSheet.getRange(1, 1, configData.length, 2).setValues(configData);
+            }
+            return successResponse({ updated: 'config' });
+        }
+
+        // ユーザーデータ更新 (既存処理)
         const id = params.id;
         const target = params.target_2026;
         const result = params.result_2026;
         const locked = params.locked;
 
-        const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_NAME);
+        const sheet = ss.getSheetByName(SHEET_NAME);
         const data = sheet.getDataRange().getValues();
 
-        // IDで検索して行を特定 (1行目はヘッダーと仮定して +2)
-        // ※データの実装に合わせて調整してください
         let rowIndex = -1;
         for (let i = 1; i < data.length; i++) {
-            // HEADERS[0] が 'id' だと仮定
             if (data[i][0] == id) {
-                rowIndex = i + 1; // 1-based index for getRange
+                rowIndex = i + 1;
                 break;
             }
         }
 
-        if (rowIndex === -1) {
-            return ContentService.createTextOutput(JSON.stringify({ status: 'error', message: 'User not found' }));
-        }
-
-        // 更新処理
-        // status_2026, target_2026, result_2026, locked の列番号を指定して更新
-        // HEADERS配列のインデックス + 1 が列番号
+        if (rowIndex === -1) return errorResponse('User not found');
 
         if (target !== undefined) {
-            const targetCol = HEADERS.indexOf('target_2026') + 1;
-            sheet.getRange(rowIndex, targetCol).setValue(target);
+            sheet.getRange(rowIndex, HEADERS.indexOf('target_2026') + 1).setValue(target);
         }
         if (result !== undefined) {
-            const resultCol = HEADERS.indexOf('result_2026') + 1;
-            sheet.getRange(rowIndex, resultCol).setValue(result);
+            sheet.getRange(rowIndex, HEADERS.indexOf('result_2026') + 1).setValue(result);
         }
         if (locked !== undefined) {
-            const lockedCol = HEADERS.indexOf('locked') + 1;
-            sheet.getRange(rowIndex, lockedCol).setValue(locked);
+            sheet.getRange(rowIndex, HEADERS.indexOf('locked') + 1).setValue(locked);
         }
 
-        return ContentService.createTextOutput(JSON.stringify({ status: 'success', id: id }));
+        return successResponse({ id: id });
 
     } catch (error) {
-        return ContentService.createTextOutput(JSON.stringify({ status: 'error', message: error.toString() }));
+        return errorResponse(error.toString());
     }
+}
+
+function successResponse(data) {
+    return ContentService.createTextOutput(JSON.stringify({ status: 'success', ...data }))
+        .setMimeType(ContentService.MimeType.JSON);
+}
+
+function errorResponse(message) {
+    return ContentService.createTextOutput(JSON.stringify({ status: 'error', message: message }))
+        .setMimeType(ContentService.MimeType.JSON);
 }
