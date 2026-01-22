@@ -227,6 +227,9 @@ function App() {
 
   // Charity Calculation Helper
   const calculateCharity = (u) => {
+    // Retire = Max Penalty (5000)
+    if (u.result_2026 === 'リタイア') return 5000;
+
     if (!u.result_2026 || !u.target_2026) return null;
     const result = parseFloat(u.result_2026);
     const target = parseFloat(u.target_2026);
@@ -237,10 +240,9 @@ function App() {
     const adjustedResult = result - dMinus + dPlus;
     const diff = adjustedResult - target;
 
-    if (diff <= 0) return 0; // No charity if faster than target (after dice logic?)
-    // Or is it always charged? Usually charity penalties are for being slower. 
-    // "500円/分" -> If diff is positive (slower), pay 500 * diff.
-    return Math.ceil(diff) * 500;
+    // "1 min = 500 JPY" (Plus and Minus both count). Cap at 5000.
+    const amount = Math.ceil(Math.abs(diff)) * 500;
+    return Math.min(amount, 5000);
   };
 
   const sortedData = [...users].sort((a, b) => { // Use 'users' instead of MOCK_DATA
@@ -276,7 +278,7 @@ function App() {
     );
   }
 
-  if (view === 'SUMMARY') {
+  if (view === 'ENTHUSIASM' || view === 'RESULT') {
     // Filter out non-participants/no-entry for the list
     const filteredUsers = sortedData.filter(u => {
       // Logic: Must be Participating.
@@ -312,11 +314,13 @@ function App() {
               )}
             </div>
 
-            {/* TOTAL CHARITY DISPLAY */}
-            <div className="bg-gradient-to-r from-yellow-600/20 to-yellow-500/10 border border-yellow-500/30 px-6 py-2 rounded-xl text-center">
-              <p className="text-[10px] text-yellow-500 uppercase tracking-widest font-bold">TOTAL CHARITY</p>
-              <p className="text-3xl font-black text-yellow-400 font-mono">¥{totalCharitySum.toLocaleString()}</p>
-            </div>
+            {/* TOTAL CHARITY DISPLAY - Only in Result View */}
+            {view === 'RESULT' && (
+              <div className="bg-gradient-to-r from-yellow-600/20 to-yellow-500/10 border border-yellow-500/30 px-6 py-2 rounded-xl text-center">
+                <p className="text-[10px] text-yellow-500 uppercase tracking-widest font-bold">TOTAL CHARITY</p>
+                <p className="text-3xl font-black text-yellow-400 font-mono">¥{totalCharitySum.toLocaleString()}</p>
+              </div>
+            )}
 
             <button onClick={() => setView('TOP')} className="bg-[#0090DA] hover:bg-[#34B6F3] text-white px-6 py-2 rounded-full text-sm font-bold transition-all shadow-lg shadow-blue-900/50">
               BACK TO TOP
@@ -329,15 +333,21 @@ function App() {
                   <th className="px-2 py-4 w-12" onClick={() => handleSort('id')}>No.<SortIcon column="id" /></th>
                   <th className="px-2 py-4" onClick={() => handleSort('name')}>Name<SortIcon column="name" /></th>
                   <th className="px-2 py-4 w-16 text-center" onClick={() => handleSort('category')}>Team<SortIcon column="category" /></th>
+                  <th className="px-2 py-4 w-20 text-center" onClick={() => handleSort('average')}>Avg<SortIcon column="average" /></th>
                   <th className="px-2 py-4 text-center" onClick={() => handleSort('target_2026')}>Target<SortIcon column="target_2026" /></th>
-                  <th className="px-2 py-4 text-center text-lg">Result</th>
-                  <th className="px-2 py-4 text-center font-mono text-gray-400">Adjusted</th>
-                  <th className="px-2 py-4 text-center">Charity</th>
+                  {view === 'RESULT' && (
+                    <>
+                      <th className="px-2 py-4 text-center text-lg">Result</th>
+                      <th className="px-2 py-4 text-center font-mono text-gray-400">Adjusted</th>
+                      <th className="px-2 py-4 text-center">Charity</th>
+                    </>
+                  )}
                 </tr>
               </thead>
               <tbody className="divide-y divide-blue-900/30 text-gray-300">
                 {filteredUsers.map((u) => {
                   const charity = calculateCharity(u);
+                  const icon = getEnthusiasmIcon(u);
 
                   // Calculate Adjusted Time for display
                   let adjustedTime = '-';
@@ -364,22 +374,32 @@ function App() {
                           <span className="px-2 py-1 rounded text-[9px] font-black bg-[#00D060] text-[#002010] tracking-wider block whitespace-nowrap">PARTNER</span>
                         )}
                       </td>
+                      <td className="px-2 py-4 text-center font-mono text-gray-400">
+                        {u.average ? parseFloat(u.average).toFixed(1) : '-'}
+                      </td>
                       <td className="px-2 py-4 text-center font-bold text-[#0090DA] text-xl font-mono">
-                        {u.target_2026 || '-'}
+                        <div className="flex items-center justify-center gap-2">
+                          {u.target_2026 || '-'}
+                          {icon && <span className="scale-125">{icon}</span>}
+                        </div>
                       </td>
-                      <td className="px-2 py-4 text-center font-mono text-xl text-white font-black bg-white/5 rounded">
-                        {u.result_2026 || '-'}
-                      </td>
-                      <td className="px-2 py-4 text-center font-mono text-lg text-gray-400">
-                        {adjustedTime}
-                      </td>
-                      <td className="px-2 py-4 text-center">
-                        {charity !== null ? (
-                          <span className="text-yellow-400 font-bold font-mono">¥{charity.toLocaleString()}</span>
-                        ) : (
-                          <span className="text-gray-600">-</span>
-                        )}
-                      </td>
+                      {view === 'RESULT' && (
+                        <>
+                          <td className="px-2 py-4 text-center font-mono text-xl text-white font-black bg-white/5 rounded">
+                            {u.result_2026 || '-'}
+                          </td>
+                          <td className="px-2 py-4 text-center font-mono text-lg text-gray-400">
+                            {adjustedTime}
+                          </td>
+                          <td className="px-2 py-4 text-center">
+                            {charity !== null ? (
+                              <span className="text-yellow-400 font-bold font-mono">¥{charity.toLocaleString()}</span>
+                            ) : (
+                              <span className="text-gray-600">-</span>
+                            )}
+                          </td>
+                        </>
+                      )}
                     </tr>
                   )
                 })}
@@ -505,7 +525,7 @@ function App() {
       {/* SUMMARY LARGE BUTTONS */}
       <div className="grid grid-cols-2 gap-4 w-full max-w-lg mb-8">
         <button
-          onClick={() => setView('SUMMARY')}
+          onClick={() => setView('ENTHUSIASM')}
           className="group relative overflow-hidden bg-gradient-to-br from-[#0090DA] to-[#0060A0] p-6 rounded-2xl shadow-xl hover:shadow-[#0090DA]/40 hover:-translate-y-1 transition-all duration-300"
         >
           <div className="absolute inset-0 bg-white/10 opacity-0 group-hover:opacity-100 transition-opacity"></div>
@@ -515,7 +535,7 @@ function App() {
         </button>
 
         <button
-          onClick={() => setView('SUMMARY')}
+          onClick={() => setView('RESULT')}
           className="group relative overflow-hidden bg-gradient-to-br from-[#ffffff] to-[#e0e0e0] p-6 rounded-2xl shadow-xl hover:shadow-white/20 hover:-translate-y-1 transition-all duration-300"
         >
           <div className="absolute inset-0 bg-black/5 opacity-0 group-hover:opacity-100 transition-opacity"></div>
