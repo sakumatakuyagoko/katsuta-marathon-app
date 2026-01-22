@@ -332,9 +332,13 @@ function App() {
                 <tr>
                   <th className="px-2 py-4 w-12" onClick={() => handleSort('id')}>No.<SortIcon column="id" /></th>
                   <th className="px-2 py-4" onClick={() => handleSort('name')}>Name<SortIcon column="name" /></th>
-                  <th className="px-2 py-4 w-16 text-center" onClick={() => handleSort('category')}>Team<SortIcon column="category" /></th>
-                  <th className="px-2 py-4 w-20 text-center" onClick={() => handleSort('average')}>Avg<SortIcon column="average" /></th>
-                  <th className="px-2 py-4 text-center" onClick={() => handleSort('target_2026')}>Target<SortIcon column="target_2026" /></th>
+                  <th className={`px-2 py-4 text-center ${view === 'RESULT' ? 'w-16' : 'w-28'}`} onClick={() => handleSort('category')}>Team<SortIcon column="category" /></th>
+                  {view !== 'RESULT' && (
+                    <>
+                      <th className="px-2 py-4 w-20 text-center" onClick={() => handleSort('average')}>Avg<SortIcon column="average" /></th>
+                      <th className="px-2 py-4 text-center" onClick={() => handleSort('target_2026')}>Target<SortIcon column="target_2026" /></th>
+                    </>
+                  )}
                   {view === 'RESULT' && (
                     <>
                       <th className="px-2 py-4 text-center text-lg">Result</th>
@@ -369,20 +373,28 @@ function App() {
                       </td>
                       <td className="px-2 py-4 text-center">
                         {u.category === 'k' ? (
-                          <span className="px-2 py-1 rounded text-[9px] font-black bg-[#0090DA] text-white tracking-wider block whitespace-nowrap">KOMATSU</span>
+                          <span className={`px-2 py-1 rounded text-[9px] font-black bg-[#0090DA] text-white tracking-wider block whitespace-nowrap overflow-hidden text-ellipsis ${view === 'RESULT' ? 'max-w-[4rem]' : ''}`}>
+                            {view === 'RESULT' ? 'K' : 'KOMATSU'}
+                          </span>
                         ) : (
-                          <span className="px-2 py-1 rounded text-[9px] font-black bg-[#00D060] text-[#002010] tracking-wider block whitespace-nowrap">PARTNER</span>
+                          <span className={`px-2 py-1 rounded text-[9px] font-black bg-[#00D060] text-[#002010] tracking-wider block whitespace-nowrap overflow-hidden text-ellipsis ${view === 'RESULT' ? 'max-w-[4rem]' : ''}`}>
+                            {view === 'RESULT' ? 'P' : 'PARTNER'}
+                          </span>
                         )}
                       </td>
-                      <td className="px-2 py-4 text-center font-mono text-gray-400">
-                        {u.average ? parseFloat(u.average).toFixed(1) : '-'}
-                      </td>
-                      <td className="px-2 py-4 text-center font-bold text-[#0090DA] text-xl font-mono">
-                        <div className="flex items-center justify-center gap-2">
-                          {u.target_2026 || '-'}
-                          {icon && <span className="scale-125">{icon}</span>}
-                        </div>
-                      </td>
+                      {view !== 'RESULT' && (
+                        <>
+                          <td className="px-2 py-4 text-center font-mono text-gray-400">
+                            {(u.average && !isNaN(parseFloat(u.average))) ? parseFloat(u.average).toFixed(1) : '-'}
+                          </td>
+                          <td className="px-2 py-4 text-center font-bold text-[#0090DA] text-xl font-mono">
+                            <div className="flex items-center justify-center gap-2">
+                              {u.target_2026 || '-'}
+                              {icon && <span className="scale-125">{icon}</span>}
+                            </div>
+                          </td>
+                        </>
+                      )}
                       {view === 'RESULT' && (
                         <>
                           <td className="px-2 py-4 text-center font-mono text-xl text-white font-black bg-white/5 rounded">
@@ -438,15 +450,15 @@ function App() {
         {/* TOP SCREEN DICE DISPLAY: ROW LAYOUT */}
         {(globalConfig.dice_minus || globalConfig.dice_plus) && (
           <div className="mt-6 mx-2 flex justify-center items-stretch gap-2 md:gap-4 animate-in fade-in slide-in-from-top-4 duration-700">
-            {/* Harada */}
+            {/* Harada -> 1st Dice */}
             <div className="bg-gradient-to-br from-red-900/40 to-red-600/10 border border-red-500/30 px-4 py-4 rounded-xl text-center shadow-[0_0_30px_rgba(220,38,38,0.2)] flex-1">
-              <p className="text-[10px] text-red-300 uppercase tracking-widest mb-2 font-bold whitespace-nowrap">Harada</p>
+              <p className="text-[10px] text-red-300 uppercase tracking-widest mb-2 font-bold whitespace-nowrap">1st Dice(-)</p>
               <p className="text-4xl md:text-5xl font-black text-white font-mono leading-none tracking-tighter">-{globalConfig.dice_minus || 0}</p>
             </div>
 
-            {/* Yanagisawa */}
+            {/* Yanagisawa -> Final Dice */}
             <div className="bg-gradient-to-br from-green-900/40 to-green-600/10 border border-green-500/30 px-4 py-4 rounded-xl text-center shadow-[0_0_30px_rgba(34,197,94,0.2)] flex-1">
-              <p className="text-[10px] text-green-300 uppercase tracking-widest mb-2 font-bold whitespace-nowrap">Yanagisawa</p>
+              <p className="text-[10px] text-green-300 uppercase tracking-widest mb-2 font-bold whitespace-nowrap">Final Dice(+)</p>
               <p className="text-4xl md:text-5xl font-black text-white font-mono leading-none tracking-tighter">+{globalConfig.dice_plus || 0}</p>
             </div>
 
