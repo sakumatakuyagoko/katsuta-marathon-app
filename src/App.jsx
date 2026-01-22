@@ -353,15 +353,15 @@ function App() {
                   return (
                     <tr key={u.id} className="hover:bg-white/5 transition-colors">
                       <td className="px-2 py-4 font-mono text-blue-500 font-bold">{String(u.id).padStart(2, '0')}</td>
-                      <td className="px-2 py-4 font-bold text-white text-base">
+                      <td className="px-2 py-4 font-bold text-white text-sm truncate max-w-[120px]">
                         {u.name}
-                        {u.temp_2026 && <span className="ml-2 text-[10px] text-gray-500 border border-gray-600 px-1 rounded">({u.temp_2026})</span>}
+                        {u.temp_2026 && <span className="ml-1 text-[10px] text-gray-500 border border-gray-600 px-1 rounded block w-fit mt-1">({u.temp_2026})</span>}
                       </td>
                       <td className="px-2 py-4 text-center">
                         {u.category === 'k' ? (
-                          <span className="px-1 py-1 rounded text-[10px] font-black bg-[#0090DA] text-white tracking-tighter">K</span>
+                          <span className="px-2 py-1 rounded text-[9px] font-black bg-[#0090DA] text-white tracking-wider block whitespace-nowrap">KOMATSU</span>
                         ) : (
-                          <span className="px-1 py-1 rounded text-[10px] font-black bg-[#00D060] text-[#002010] tracking-tighter">P</span>
+                          <span className="px-2 py-1 rounded text-[9px] font-black bg-[#00D060] text-[#002010] tracking-wider block whitespace-nowrap">PARTNER</span>
                         )}
                       </td>
                       <td className="px-2 py-4 text-center font-bold text-[#0090DA] text-xl font-mono">
