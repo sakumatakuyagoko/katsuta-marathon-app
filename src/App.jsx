@@ -80,11 +80,19 @@ function App() {
   const komatsuUsers = users.filter(u => u.category === 'k');
   const partnerUsers = users.filter(u => u.category === 'm');
 
-  const isTargetExpired = new Date() > new Date(globalConfig.target_deadline || '2026-01-26T09:00:00');
-  const isResultExpired = new Date() > new Date(globalConfig.deadline || '2026-01-26T15:00:00'); // Default later for result
+  const isTargetExpired = new Date() > new Date(globalConfig.target_deadline || '2026-01-25T10:59:00');
+  const isResultExpired = new Date() > new Date(globalConfig.deadline || '2026-01-25T11:00:00'); // Result input starts from here
 
   // Use generic isExpired for legacy checks, but prefer specific ones
   const isExpired = isResultExpired;
+
+  // Calculate Total Charity (Active when Result Input is possible)
+  const totalCharitySum = users.reduce((sum, u) => {
+    // Check participation first
+    if (u.temp_2026 && u.temp_2026 !== '参加' && u.temp_2026 !== 'フル') return sum;
+    const c = calculateCharity(u);
+    return sum + (c || 0);
+  }, 0);
 
   // --- HANDLERS ---
 
@@ -533,6 +541,19 @@ function App() {
             </div>
           </div>
         )}
+
+        {/* TOTAL CHARITY DISPLAY (Only visible after Target Deadline matches Result Input Start) */}
+        {isTargetExpired && (
+          <div className="mt-6 mx-4 animate-in fade-in slide-in-from-bottom-4 duration-1000">
+            <div className="bg-gradient-to-r from-yellow-600/30 via-yellow-500/20 to-yellow-600/30 border border-yellow-500/50 p-4 rounded-2xl text-center shadow-[0_0_40px_rgba(234,179,8,0.2)]">
+              <p className="text-yellow-500 text-xs uppercase tracking-[0.3em] font-bold mb-1">TOTAL CHARITY</p>
+              <p className="text-5xl md:text-6xl font-black text-yellow-400 font-mono tracking-tighter drop-shadow-[0_0_10px_rgba(250,204,21,0.5)]">
+                ¥{totalCharitySum.toLocaleString()}
+              </p>
+              <p className="text-[10px] text-yellow-500/70 mt-2 uppercase tracking-widest">CURRENT POOL</p>
+            </div>
+          </div>
+        )}
       </header>
 
       <div className="w-full max-w-lg space-y-8 mb-8 relative z-0">
@@ -820,8 +841,9 @@ function App() {
           onClick={() => {
             setDiceMinus(globalConfig.dice_minus || '');
             setDicePlus(globalConfig.dice_plus || '');
-            setAdminDeadline(globalConfig.deadline || '');
-            setAdminTargetDeadline(globalConfig.target_deadline || '');
+            // Deadlines default to existing config OR requested defaults
+            setAdminDeadline(globalConfig.deadline || '2026-01-25T11:00');
+            setAdminTargetDeadline(globalConfig.target_deadline || '2026-01-25T10:59');
             setShowAdminModal(true);
           }}
           className="bg-black/50 text-white text-xs px-2 py-1 rounded border border-white/20"
