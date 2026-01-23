@@ -515,29 +515,39 @@ function App() {
         </div>
 
         {/* TOP SCREEN DICE DISPLAY: ROW LAYOUT (Hidden until Target Deadline passes) */}
-        {(isTargetExpired && (globalConfig.dice_minus || globalConfig.dice_plus)) && (
+        {isTargetExpired && (
           <div className="mt-6 mx-2 flex justify-center items-stretch gap-2 md:gap-4 animate-in fade-in slide-in-from-top-4 duration-700">
             {/* Harada -> 1st Dice */}
             <div className="bg-gradient-to-br from-red-900/40 to-red-600/10 border border-red-500/30 px-4 py-4 rounded-xl text-center shadow-[0_0_30px_rgba(220,38,38,0.2)] flex-1">
               <p className="text-[10px] text-red-300 uppercase tracking-widest mb-2 font-bold whitespace-nowrap">1st Dice(-)</p>
-              <p className="text-4xl md:text-5xl font-black text-white font-mono leading-none tracking-tighter">-{globalConfig.dice_minus || 0}</p>
+              <p className="text-4xl md:text-5xl font-black text-white font-mono leading-none tracking-tighter">
+                {globalConfig.dice_minus ? `-${globalConfig.dice_minus}` : '❓'}
+              </p>
             </div>
 
             {/* Yanagisawa -> Final Dice */}
             <div className="bg-gradient-to-br from-green-900/40 to-green-600/10 border border-green-500/30 px-4 py-4 rounded-xl text-center shadow-[0_0_30px_rgba(34,197,94,0.2)] flex-1">
               <p className="text-[10px] text-green-300 uppercase tracking-widest mb-2 font-bold whitespace-nowrap">Final Dice(+)</p>
-              <p className="text-4xl md:text-5xl font-black text-white font-mono leading-none tracking-tighter">+{globalConfig.dice_plus || 0}</p>
+              <p className="text-4xl md:text-5xl font-black text-white font-mono leading-none tracking-tighter">
+                {globalConfig.dice_plus ? `+${globalConfig.dice_plus}` : '❓'}
+              </p>
             </div>
 
             {/* Total */}
             <div className="bg-gradient-to-br from-blue-900/40 to-blue-600/10 border border-blue-500/30 px-4 py-4 rounded-xl text-center shadow-[0_0_30px_rgba(59,130,246,0.3)] flex-1 flex flex-col justify-center">
               <p className="text-[10px] text-blue-300 uppercase tracking-widest mb-1 font-bold whitespace-nowrap">TOTAL</p>
               <div className="flex items-baseline justify-center gap-1">
-                <span className="text-4xl md:text-5xl font-black text-white font-mono leading-none tracking-tighter">
-                  {(parseInt(globalConfig.dice_plus || 0) - parseInt(globalConfig.dice_minus || 0)) > 0 ? '+' : ''}
-                  {parseInt(globalConfig.dice_plus || 0) - parseInt(globalConfig.dice_minus || 0)}
-                </span>
-                <span className="text-xs text-blue-300 font-bold">MIN</span>
+                {(globalConfig.dice_minus && globalConfig.dice_plus) ? (
+                  <span className="text-4xl md:text-5xl font-black text-white font-mono leading-none tracking-tighter">
+                    {(parseInt(globalConfig.dice_plus || 0) - parseInt(globalConfig.dice_minus || 0)) > 0 ? '+' : ''}
+                    {parseInt(globalConfig.dice_plus || 0) - parseInt(globalConfig.dice_minus || 0)}
+                  </span>
+                ) : (
+                  <span className="text-4xl md:text-5xl font-black text-white font-mono leading-none tracking-tighter">❓</span>
+                )}
+                {/* Only show MIN unit if value is present */
+                  (globalConfig.dice_minus && globalConfig.dice_plus) && <span className="text-xs text-blue-300 font-bold">MIN</span>
+                }
               </div>
             </div>
           </div>
@@ -837,7 +847,7 @@ function App() {
       )}
 
       {/* ADMIN BUTTON (Footer) */}
-      <div className="fixed bottom-4 right-4 z-10 opacity-30 hover:opacity-100 transition-opacity">
+      <div className="fixed bottom-4 right-4 z-[100] opacity-50 hover:opacity-100 transition-opacity">
         <button
           onClick={() => {
             setDiceMinus(globalConfig.dice_minus || '');
@@ -846,7 +856,7 @@ function App() {
             setAdminTargetDeadline(globalConfig.target_deadline || '2026-01-25T10:59');
             setShowAdminModal(true);
           }}
-          className="bg-black/50 text-white text-xs px-2 py-1 rounded border border-white/20"
+          className="bg-black/80 text-white text-sm px-3 py-2 rounded-full border border-white/40 shadow-lg"
         >
           ⚙️
         </button>
@@ -969,6 +979,9 @@ function App() {
                   <li>目標入力期限（スタート前）までは何度でも変更可能です。</li>
                   <li>
                     期限を過ぎると<span className="text-white font-bold">結果入力モード</span>に切り替わります。
+                  </li>
+                  <li>
+                    <span className="text-yellow-400 font-bold">走り終わったら</span>、
                     自分の名前を選択し、結果タイムを入力してください。
                   </li>
                 </ul>
