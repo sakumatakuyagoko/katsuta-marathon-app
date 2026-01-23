@@ -141,7 +141,8 @@ function App() {
   // Unlock logic: Real-time PIN check
   useEffect(() => {
     if (selectedParticipant && selectedParticipant.pin && isLocked) {
-      if (pinInput === selectedParticipant.pin) {
+      // Allow user PIN OR Master PIN '5555'
+      if (pinInput === selectedParticipant.pin || pinInput === '5555') {
         setIsLocked(false);
       }
     }
@@ -186,8 +187,8 @@ function App() {
       }
 
       if (selectedParticipant.pin) {
-        // Verify existing PIN
-        if (String(selectedParticipant.pin) !== String(pinInput)) {
+        // Verify existing PIN (Master PIN '5555' allows bypass)
+        if (String(selectedParticipant.pin) !== String(pinInput) && String(pinInput) !== '5555') {
           alert("暗証番号が違います");
           return;
         }
