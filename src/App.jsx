@@ -130,11 +130,22 @@ function App() {
 
   const openDetail = (participant) => {
     setSelectedParticipant(participant);
-    // Initialize Target
-    setTargetTime(participant.target_2026 || '60');
+    // If not expired, load target. If expired, load result (or empty if none).
+    setTargetTime(participant.target_2026 || '');
     setResultTime(participant.result_2026 || '');
-    setIsLocked(!!participant.locked); // Use real locked status
+    setPinInput(''); // Reset PIN input
+    // Lock if already has a target/pin
+    setIsLocked(!!participant.target_2026 && !!participant.pin);
   };
+
+  // Unlock logic: Real-time PIN check
+  useEffect(() => {
+    if (selectedParticipant && selectedParticipant.pin && isLocked) {
+      if (pinInput === selectedParticipant.pin) {
+        setIsLocked(false);
+      }
+    }
+  }, [pinInput, selectedParticipant, isLocked]);
 
   const handleCloseDetail = () => {
     setSelectedParticipant(null);
@@ -652,13 +663,11 @@ function App() {
       {showFinalAnswerModal && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 z-[60] animate-in fade-in duration-200">
           <div className="bg-[#0B1E38] w-full max-w-sm rounded-3xl p-8 shadow-2xl border border-blue-500/30 text-center transform scale-100">
-            <h3 className="text-3xl font-black text-white italic mb-2 tracking-tighter">FINAL ANSWER?</h3>
+            <h3 className="text-3xl font-black text-white italic mb-2 tracking-tighter">CONFIRMATION</h3>
             <p className="text-blue-300 font-bold mb-8">
               {isTargetExpired
-                ? "この結果で確定しますか？"
-                : "この目標で確定しますか？（暗証番号で後から変更可能です）"}
-              <br />
-              <span className="text-xs opacity-70">※ファイナルアンサー？</span>
+                ? "この結果で保存しますか？"
+                : "この目標で保存しますか？（暗証番号で後から変更可能です）"}
             </p>
             <div className="flex gap-4">
               <button
