@@ -44,10 +44,16 @@ function App() {
 
   // Admin / Dice State
   const [showAdminModal, setShowAdminModal] = useState(false);
-  const [adminPin, setAdminPin] = useState('');
   const [diceMinus, setDiceMinus] = useState('');
   const [dicePlus, setDicePlus] = useState('');
   const [adminDeadline, setAdminDeadline] = useState('');
+  const [adminTargetDeadline, setAdminTargetDeadline] = useState('');
+
+  // Rules Modal
+  const [showRulesModal, setShowRulesModal] = useState(false);
+
+  // User PIN State
+  const [pinInput, setPinInput] = useState('');
 
   // Fetch Data on Mount
   useEffect(() => {
@@ -74,7 +80,11 @@ function App() {
   const komatsuUsers = users.filter(u => u.category === 'k');
   const partnerUsers = users.filter(u => u.category === 'm');
 
-  const isExpired = new Date() > new Date(globalConfig.deadline || '2026-01-26T09:00:00');
+  const isTargetExpired = new Date() > new Date(globalConfig.target_deadline || '2026-01-26T09:00:00');
+  const isResultExpired = new Date() > new Date(globalConfig.deadline || '2026-01-26T15:00:00'); // Default later for result
+
+  // Use generic isExpired for legacy checks, but prefer specific ones
+  const isExpired = isResultExpired;
 
   // --- HANDLERS ---
 
@@ -91,7 +101,8 @@ function App() {
         type: 'config',
         dice_minus: diceMinus,
         dice_plus: dicePlus,
-        deadline: adminDeadline
+        deadline: adminDeadline,
+        target_deadline: adminTargetDeadline
       })
     })
       .then(res => res.json())
@@ -101,7 +112,8 @@ function App() {
           setGlobalConfig({
             dice_minus: diceMinus,
             dice_plus: dicePlus,
-            deadline: adminDeadline
+            deadline: adminDeadline,
+            target_deadline: adminTargetDeadline
           });
           setShowAdminModal(false);
         } else {
@@ -128,6 +140,7 @@ function App() {
     setSelectedParticipant(null);
     setTargetTime('');
     setResultTime('');
+    setPinInput('');
     setShowFinalAnswerModal(false);
     setSuccessMessage(null);
   };
@@ -138,6 +151,38 @@ function App() {
   };
 
   const handleSaveClick = () => {
+    // Validation
+    const isRetire = resultTime === 'リタイア';
+
+    // Result Mode Validation
+    if (isTargetExpired) {
+      if (!isRetire && (!resultTime || isNaN(parseFloat(resultTime)))) {
+        alert("結果タイムを入力してください");
+        return;
+      }
+    }
+    // Target Mode Validation
+    else {
+      if (!targetTime || isNaN(parseFloat(targetTime))) {
+        alert("目標タイムを入力してください");
+        return;
+      }
+
+      // PIN Validation
+      if (!pinInput || pinInput.length !== 4) {
+        alert("4桁の暗証番号を入力してください");
+        return;
+      }
+
+      if (selectedParticipant.pin) {
+        // Verify existing PIN
+        if (String(selectedParticipant.pin) !== String(pinInput)) {
+          alert("暗証番号が違います");
+          return;
+        }
+      }
+    }
+
     setShowFinalAnswerModal(true);
   };
 
@@ -147,9 +192,9 @@ function App() {
     const payload = {
       id: selectedParticipant.id,
       // Send target/locked OR result depending on expiry
-      ...(isExpired
+      ...(isTargetExpired
         ? { result_2026: resultTime }
-        : { target_2026: targetTime, locked: true }
+        : { target_2026: targetTime, locked: true, pin: pinInput }
       )
     };
 
@@ -162,9 +207,9 @@ function App() {
       .then(response => response.json())
       .then(result => {
         if (result.status === 'success') {
-          const msg = isExpired
+          const msg = isTargetExpired
             ? `${selectedParticipant.name}さんの結果を保存しました`
-            : "目標受け付けました！頑張って！";
+            : "目標受け付けました！パスワードを忘れないでね！";
 
           // Update local state to reflect changes immediately
           setUsers(prev => prev.map(u => {
@@ -441,6 +486,12 @@ function App() {
         <h1 className="text-4xl md:text-5xl font-black tracking-tight leading-none mb-2 italic">
           <span className="text-transparent bg-clip-text bg-gradient-to-r from-white via-white to-gray-400">君よ、勝田の風になれ！</span>
         </h1>
+        <button
+          onClick={() => setShowRulesModal(true)}
+          className="absolute top-0 right-0 text-[10px] md:text-xs text-blue-300 border border-blue-300/30 px-2 py-1 rounded-full hover:bg-blue-300/10 transition-colors z-20"
+        >
+          使い方・ルール
+        </button>
         <div className="flex justify-between items-center text-xs md:text-sm font-bold text-[#0090DA] uppercase tracking-[0.2em] border-y border-[#0090DA]/30 py-2 mx-4 mt-4 bg-black/20 backdrop-blur-sm px-4">
           <div className="flex gap-2 md:gap-4 text-left">
             <span>KOMATSU</span>
@@ -571,8 +622,11 @@ function App() {
           <div className="bg-[#0B1E38] w-full max-w-sm rounded-3xl p-8 shadow-2xl border border-blue-500/30 text-center transform scale-100">
             <h3 className="text-3xl font-black text-white italic mb-2 tracking-tighter">FINAL ANSWER?</h3>
             <p className="text-blue-300 font-bold mb-8">
-              この内容で確定しますか？<br />
-              <span className="text-xs opacity-70">※確定後は変更できません</span>
+              {isTargetExpired
+                ? "この結果で確定しますか？"
+                : "この目標で確定しますか？（暗証番号で後から変更可能です）"}
+              <br />
+              <span className="text-xs opacity-70">※ファイナルアンサー？</span>
             </p>
             <div className="flex gap-4">
               <button
@@ -707,23 +761,43 @@ function App() {
                     </div>
                   )}
 
-                  {/* Action Button */}
-                  {(!isLocked || isExpired) && (
-                    <button
-                      onClick={handleSaveClick}
-                      className={`w-full font-black py-5 px-6 rounded-xl shadow-lg transition-all active:scale-95 text-xl flex items-center justify-center gap-2 italic ${isExpired
-                        ? 'bg-gradient-to-r from-red-600 to-red-500 text-white'
-                        : (selectedParticipant.category === 'k' ? 'bg-gradient-to-r from-[#0090DA] to-[#34B6F3] text-[#001026]' : 'bg-gradient-to-r from-[#00D060] to-[#40F080] text-[#002010]')
-                        }`}
-                    >
-                      <span>{isExpired ? 'SAVE RESULT' : 'LOCK TARGET'}</span>
-                    </button>
+                  {/* PIN Input for Target Mode */}
+                  {!isTargetExpired && (
+                    <div className="mb-6">
+                      <label className="text-xs text-[#0090DA] font-bold mb-2 block uppercase tracking-widest">
+                        {selectedParticipant.pin ? 'ENTER PIN TO UPDATE (4 digits)' : 'SET PIN (4 digits)'}
+                      </label>
+                      <input
+                        type="password" /* numeric ideally but password hides it */
+                        inputMode="numeric"
+                        pattern="[0-9]*"
+                        maxLength="4"
+                        value={pinInput}
+                        onChange={(e) => setPinInput(e.target.value)}
+                        placeholder={selectedParticipant.pin ? "****" : "0000"}
+                        className="w-full bg-black/30 border border-gray-600 rounded-lg p-3 text-white text-center text-xl tracking-[0.5em] font-mono focus:border-[#0090DA] outline-none placeholder-gray-700"
+                      />
+                      <p className="text-[10px] text-gray-500 text-center mt-1">
+                        {selectedParticipant.pin
+                          ? "※変更するには設定した暗証番号を入力してください"
+                          : "※初回入力です。他人に変更されないよう設定してください"}
+                      </p>
+                    </div>
                   )}
 
-                  {isLocked && !isExpired && (
-                    <div className="text-center p-4 bg-white/5 rounded-xl border border-white/10">
-                      <p className="text-gray-400 text-xs">Target time is locked</p>
-                      <p className="text-white font-bold italic mt-1">SEE YOU AT THE FINISH LINE</p>
+                  <button
+                    onClick={handleSaveClick}
+                    className={`w-full font-black py-5 px-6 rounded-xl shadow-lg transition-all active:scale-95 text-xl flex items-center justify-center gap-2 italic ${isTargetExpired
+                      ? 'bg-gradient-to-r from-red-600 to-red-500 text-white'
+                      : (selectedParticipant.category === 'k' ? 'bg-gradient-to-r from-[#0090DA] to-[#34B6F3] text-[#001026]' : 'bg-gradient-to-r from-[#00D060] to-[#40F080] text-[#002010]')
+                      }`}
+                  >
+                    <span>{isTargetExpired ? 'SAVE RESULT' : (selectedParticipant.pin ? 'UPDATE TARGET' : 'LOCK TARGET')}</span>
+                  </button>
+
+                  {isTargetExpired && selectedParticipant.locked && !selectedParticipant.result_2026 && (
+                    <div className="text-center mt-4">
+                      <p className="text-yellow-500 text-sm animate-pulse">Waiting for Result Input...</p>
                     </div>
                   )}
 
@@ -739,13 +813,15 @@ function App() {
           </div>
         </div>
       )}
+
       {/* ADMIN BUTTON (Footer) */}
       <div className="fixed bottom-4 right-4 z-10 opacity-30 hover:opacity-100 transition-opacity">
         <button
           onClick={() => {
             setDiceMinus(globalConfig.dice_minus || '');
             setDicePlus(globalConfig.dice_plus || '');
-            setAdminDeadline(globalConfig.deadline || '2026-01-26T09:00');
+            setAdminDeadline(globalConfig.deadline || '');
+            setAdminTargetDeadline(globalConfig.target_deadline || '');
             setShowAdminModal(true);
           }}
           className="bg-black/50 text-white text-xs px-2 py-1 rounded border border-white/20"
@@ -784,7 +860,17 @@ function App() {
               </div>
 
               <div>
-                <label className="text-xs text-gray-400 block mb-1">DEADLINE (YYYY-MM-DDTHH:mm)</label>
+                <label className="text-xs text-gray-400 block mb-1">TARGET DEADLINE (目標入力期限)</label>
+                <input
+                  type="datetime-local"
+                  value={adminTargetDeadline}
+                  onChange={(e) => setAdminTargetDeadline(e.target.value)}
+                  className="w-full bg-black/30 border border-yellow-600 rounded p-2 text-white font-mono text-sm text-center mb-2"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs text-gray-400 block mb-1">RESULT DEADLINE (結果入力期限)</label>
                 <input
                   type="datetime-local"
                   value={adminDeadline}
@@ -841,8 +927,67 @@ function App() {
         </div>
       )}
 
+      {/* --- RULES MODAL --- */}
+      {showRulesModal && (
+        <div className="fixed inset-0 bg-black/90 backdrop-blur-md flex items-center justify-center p-4 z-[90] animate-in fade-in duration-200">
+          <div className="bg-[#0B1E38] w-full max-w-lg rounded-3xl p-8 border border-white/10 shadow-2xl relative max-h-[90vh] overflow-y-auto">
+            <button
+              onClick={() => setShowRulesModal(false)}
+              className="absolute top-4 right-4 text-gray-400 hover:text-white"
+            >
+              ✕
+            </button>
+
+            <h2 className="text-2xl font-black text-white italic mb-6 border-b border-white/10 pb-4">
+              使い方・チャリティールール
+            </h2>
+
+            <div className="space-y-6 text-sm text-gray-300">
+              <section>
+                <h3 className="text-[#0090DA] font-bold text-lg mb-2">🏁 使い方</h3>
+                <ul className="list-disc pl-5 space-y-2">
+                  <li>自分の名前を選択して、目標タイムを入力してください。</li>
+                  <li>
+                    <span className="text-white font-bold">初回入力時に4桁の暗証番号を設定</span>します。
+                    後から変更する場合に必要になるので忘れないでください。
+                  </li>
+                  <li>目標入力期限（スタート前）までは何度でも変更可能です。</li>
+                  <li>レース終了後、結果タイムを入力してください。</li>
+                </ul>
+              </section>
+
+              <section>
+                <h3 className="text-[#00D060] font-bold text-lg mb-2">💰 チャリティー額の決定ルール</h3>
+                <p className="mb-2">目標タイムと実際のタイム（サイコロ補正後）の差分に応じてチャリティー（寄付）をしていただきます。</p>
+
+                <div className="bg-black/30 p-4 rounded-xl font-mono text-xs md:text-sm border border-white/5 space-y-2">
+                  <p className="font-bold text-center text-white mb-2">[ 計算式 ]</p>
+                  <p className="text-center">
+                    (( 結果 - <span className="text-red-400">Dice1</span> + <span className="text-green-400">Dice2</span> ) - 目標 ) × 500円
+                  </p>
+                </div>
+
+                <ul className="list-disc pl-5 space-y-2 mt-4">
+                  <li>調整後タイムと目標タイムの差 <span className="text-white font-bold">1分につき500円</span>。</li>
+                  <li>速くても遅くても、差分がそのままチャリティー額になります。</li>
+                  <li><span className="text-white font-bold">上限は 5,000円</span> です。</li>
+                  <li><span className="text-white font-bold">リタイア</span> の場合は一律 5,000円 となります。</li>
+                </ul>
+              </section>
+            </div>
+
+            <button
+              onClick={() => setShowRulesModal(false)}
+              className="w-full mt-8 py-3 bg-white/10 hover:bg-white/20 rounded-xl font-bold text-white transition-colors"
+            >
+              CLOSE
+            </button>
+          </div>
+        </div>
+      )}
+
     </div>
-  )
+  );
 }
 
-export default App
+export default App;

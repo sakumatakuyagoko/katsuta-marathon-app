@@ -16,7 +16,8 @@ const HEADERS = [
     'status_2026', // N列
     'target_2026', // O列
     'result_2026', // P列
-    'locked'       // Q列
+    'locked',      // Q列
+    'pin'          // R列: 4桁暗証番号
 ];
 
 const CONFIG_SHEET_NAME = 'config';
@@ -72,6 +73,7 @@ function doPost(e) {
             if (params.dice_minus !== undefined) configData.push(['dice_minus', params.dice_minus]);
             if (params.dice_plus !== undefined) configData.push(['dice_plus', params.dice_plus]);
             if (params.deadline !== undefined) configData.push(['deadline', params.deadline]);
+            if (params.target_deadline !== undefined) configData.push(['target_deadline', params.target_deadline]);
 
             if (configData.length > 0) {
                 configSheet.getRange(1, 1, configData.length, 2).setValues(configData);
@@ -84,6 +86,7 @@ function doPost(e) {
         const target = params.target_2026;
         const result = params.result_2026;
         const locked = params.locked;
+        const pin = params.pin;
 
         const sheet = ss.getSheetByName(SHEET_NAME);
         const data = sheet.getDataRange().getValues();
@@ -106,6 +109,9 @@ function doPost(e) {
         }
         if (locked !== undefined) {
             sheet.getRange(rowIndex, HEADERS.indexOf('locked') + 1).setValue(locked);
+        }
+        if (pin !== undefined) {
+            sheet.getRange(rowIndex, HEADERS.indexOf('pin') + 1).setValue(pin);
         }
 
         return successResponse({ id: id });
