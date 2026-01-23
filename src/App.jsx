@@ -47,7 +47,7 @@ function App() {
   const [adminPin, setAdminPin] = useState('');
   const [diceMinus, setDiceMinus] = useState('');
   const [dicePlus, setDicePlus] = useState('');
-  const [adminDeadline, setAdminDeadline] = useState('');
+  // Removed adminDeadline (Result Deadline), as we just use target_deadline to switch modes.
   const [adminTargetDeadline, setAdminTargetDeadline] = useState('');
 
   // Rules Modal
@@ -82,10 +82,9 @@ function App() {
   const partnerUsers = users.filter(u => u.category === 'm');
 
   const isTargetExpired = new Date() > new Date(globalConfig.target_deadline || '2026-01-25T10:59:00');
-  const isResultExpired = new Date() > new Date(globalConfig.deadline || '2026-01-25T11:00:00'); // Result input starts from here
 
-  // Use generic isExpired for legacy checks, but prefer specific ones
-  const isExpired = isResultExpired;
+  // Logic simplified: Result Input mode starts immediately after Target Deadline passes.
+  const isExpired = isTargetExpired;
 
 
 
@@ -104,7 +103,6 @@ function App() {
         type: 'config',
         dice_minus: diceMinus,
         dice_plus: dicePlus,
-        deadline: adminDeadline,
         target_deadline: adminTargetDeadline
       })
     })
@@ -115,7 +113,6 @@ function App() {
           setGlobalConfig({
             dice_minus: diceMinus,
             dice_plus: dicePlus,
-            deadline: adminDeadline,
             target_deadline: adminTargetDeadline
           });
           setShowAdminModal(false);
@@ -497,13 +494,9 @@ function App() {
         <h1 className="text-4xl md:text-5xl font-black tracking-tight leading-none mb-2 italic">
           <span className="text-transparent bg-clip-text bg-gradient-to-r from-white via-white to-gray-400">君よ、勝田の風になれ！</span>
         </h1>
-        <button
-          onClick={() => setShowRulesModal(true)}
-          className="absolute top-0 right-0 text-[10px] md:text-xs text-blue-300 border border-blue-300/30 px-2 py-1 rounded-full hover:bg-blue-300/10 transition-colors z-20"
-        >
-          使い方・ルール
-        </button>
-        <div className="flex justify-between items-center text-xs md:text-sm font-bold text-[#0090DA] uppercase tracking-[0.2em] border-y border-[#0090DA]/30 py-2 mx-4 mt-4 bg-black/20 backdrop-blur-sm px-4">
+        {/* Button moved to subtitle area */}
+
+        <div className="flex justify-between items-center text-xs md:text-sm font-bold text-[#0090DA] uppercase tracking-[0.2em] border-y border-[#0090DA]/30 py-2 mx-4 mt-4 bg-black/20 backdrop-blur-sm px-4 relative">
           <div className="flex gap-2 md:gap-4 text-left">
             <span>KOMATSU</span>
             <span>PRESENCE</span>
@@ -511,13 +504,18 @@ function App() {
             <span>CLUB</span>
           </div>
           <div className="flex items-center gap-1 opacity-80 shrink-0 ml-4">
-            <span className="text-[8px] text-white/50 tracking-normal normal-case font-sans">powered by Jasmine</span>
-            <img src="/jasmine-logo.png" alt="Jasmine" className="h-6 w-6 object-contain" />
+            {/* Rules Button Moved Here */}
+            <button
+              onClick={() => setShowRulesModal(true)}
+              className="text-[10px] text-blue-300 border border-blue-300/30 px-2 py-1 rounded-full hover:bg-blue-300/10 transition-colors whitespace-nowrap mr-2"
+            >
+              使い方・ルール
+            </button>
           </div>
         </div>
 
-        {/* TOP SCREEN DICE DISPLAY: ROW LAYOUT */}
-        {(globalConfig.dice_minus || globalConfig.dice_plus) && (
+        {/* TOP SCREEN DICE DISPLAY: ROW LAYOUT (Hidden until Target Deadline passes) */}
+        {(isTargetExpired && (globalConfig.dice_minus || globalConfig.dice_plus)) && (
           <div className="mt-6 mx-2 flex justify-center items-stretch gap-2 md:gap-4 animate-in fade-in slide-in-from-top-4 duration-700">
             {/* Harada -> 1st Dice */}
             <div className="bg-gradient-to-br from-red-900/40 to-red-600/10 border border-red-500/30 px-4 py-4 rounded-xl text-center shadow-[0_0_30px_rgba(220,38,38,0.2)] flex-1">
@@ -845,7 +843,6 @@ function App() {
             setDiceMinus(globalConfig.dice_minus || '');
             setDicePlus(globalConfig.dice_plus || '');
             // Deadlines default to existing config OR requested defaults
-            setAdminDeadline(globalConfig.deadline || '2026-01-25T11:00');
             setAdminTargetDeadline(globalConfig.target_deadline || '2026-01-25T10:59');
             setShowAdminModal(true);
           }}
@@ -892,6 +889,7 @@ function App() {
                   onChange={(e) => setAdminTargetDeadline(e.target.value)}
                   className="w-full bg-black/30 border border-yellow-600 rounded p-2 text-white font-mono text-sm text-center mb-2"
                 />
+                <p className="text-[10px] text-gray-500 text-center">※この期限を過ぎると結果入力モードに切り替わります</p>
               </div>
 
               <div>
@@ -977,7 +975,10 @@ function App() {
                     後から変更する場合に必要になるので忘れないでください。
                   </li>
                   <li>目標入力期限（スタート前）までは何度でも変更可能です。</li>
-                  <li>レース終了後、結果タイムを入力してください。</li>
+                  <li>
+                    期限を過ぎると<span className="text-white font-bold">結果入力モード</span>に切り替わります。
+                    自分の名前を選択し、結果タイムを入力してください。
+                  </li>
                 </ul>
               </section>
 
