@@ -44,6 +44,7 @@ function App() {
 
   // Admin / Dice State
   const [showAdminModal, setShowAdminModal] = useState(false);
+  const [adminPin, setAdminPin] = useState('');
   const [diceMinus, setDiceMinus] = useState('');
   const [dicePlus, setDicePlus] = useState('');
   const [adminDeadline, setAdminDeadline] = useState('');
@@ -86,13 +87,7 @@ function App() {
   // Use generic isExpired for legacy checks, but prefer specific ones
   const isExpired = isResultExpired;
 
-  // Calculate Total Charity (Active when Result Input is possible)
-  const totalCharitySum = users.reduce((sum, u) => {
-    // Check participation first
-    if (u.temp_2026 && u.temp_2026 !== '参加' && u.temp_2026 !== 'フル') return sum;
-    const c = calculateCharity(u);
-    return sum + (c || 0);
-  }, 0);
+
 
   // --- HANDLERS ---
 
@@ -300,6 +295,14 @@ function App() {
     const amount = Math.ceil(Math.abs(diff)) * 500;
     return Math.min(amount, 5000);
   };
+
+  // Calculate Total Charity (Active when Result Input is possible)
+  const totalCharitySum = users.reduce((sum, u) => {
+    // Check participation first
+    if (u.temp_2026 && u.temp_2026 !== '参加' && u.temp_2026 !== 'フル') return sum;
+    const c = calculateCharity(u);
+    return sum + (c || 0);
+  }, 0);
 
   const sortedData = [...users].sort((a, b) => { // Use 'users' instead of MOCK_DATA
     const key = sortConfig.key || 'id';
