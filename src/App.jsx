@@ -275,7 +275,8 @@ function App() {
     const diff = avg - target;
 
     // Using simple text for now to match the "Design" request, but icons are fine
-    if (diff >= 10) return <span title="超本気！">🔥🔥🔥</span>;
+    // 10min+ faster: Single flame but INTENSE (glow effect)
+    if (diff >= 10) return <span title="超本気！" className="filter drop-shadow-[0_0_5px_rgba(255,20,20,1)] text-lg animate-pulse">🔥</span>;
     if (diff >= 0) return <span title="やる気あり！">🔥</span>;
     return (
       <span title="安全第一" className="inline-flex items-center justify-center">
@@ -508,21 +509,22 @@ function App() {
         {/* Button moved to subtitle area */}
 
         <div className="flex justify-between items-center text-xs md:text-sm font-bold text-[#0090DA] uppercase tracking-[0.2em] border-y border-[#0090DA]/30 py-2 mx-4 mt-4 bg-black/20 backdrop-blur-sm px-4 relative">
-          <div className="flex gap-2 md:gap-4 text-left">
+          <div className="flex gap-2 md:gap-4 text-center w-full justify-center">
             <span>KOMATSU</span>
             <span>PRESENCE</span>
             <span>BOOST</span>
             <span>CLUB</span>
           </div>
-          <div className="flex items-center gap-1 opacity-80 shrink-0 ml-4">
-            {/* Rules Button Moved Here */}
-            <button
-              onClick={() => setShowRulesModal(true)}
-              className="text-[10px] text-blue-300 border border-blue-300/30 px-2 py-1 rounded-full hover:bg-blue-300/10 transition-colors whitespace-nowrap mr-2"
-            >
-              使い方・ルール
-            </button>
-          </div>
+        </div>
+
+        {/* Rules Button Row */}
+        <div className="flex justify-end mx-4 mt-2">
+          <button
+            onClick={() => setShowRulesModal(true)}
+            className="text-[10px] text-blue-300 border border-blue-300/30 px-3 py-1 rounded-full hover:bg-blue-300/10 transition-colors whitespace-nowrap flex items-center gap-1"
+          >
+            <span className="text-base">ℹ️</span> 使い方・ルール
+          </button>
         </div>
 
         {/* TOP SCREEN DICE DISPLAY: ROW LAYOUT (Hidden until Target Deadline passes) */}
