@@ -892,15 +892,7 @@ function App() {
                 <p className="text-[10px] text-gray-500 text-center">※この期限を過ぎると結果入力モードに切り替わります</p>
               </div>
 
-              <div>
-                <label className="text-xs text-gray-400 block mb-1">RESULT DEADLINE (結果入力期限)</label>
-                <input
-                  type="datetime-local"
-                  value={adminDeadline}
-                  onChange={(e) => setAdminDeadline(e.target.value)}
-                  className="w-full bg-black/30 border border-blue-900 rounded p-2 text-white font-mono text-sm text-center"
-                />
-              </div>
+
 
               <div className="pt-4 border-t border-gray-700">
                 <label className="text-xs text-gray-400 block mb-1">ADMIN PASSWORD</label>
