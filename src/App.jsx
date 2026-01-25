@@ -25,6 +25,9 @@ const THEME = {
   }
 };
 
+// --- READ ONLY MODE (Post-Event Lock) ---
+const IS_READ_ONLY = true;
+
 function App() {
   const [view, setView] = useState('TOP'); // 'TOP' | 'SUMMARY'
   const [users, setUsers] = useState([]);
@@ -435,7 +438,7 @@ function App() {
                   }
 
                   return (
-                    <tr key={u.id} className="hover:bg-white/5 transition-colors">
+                    <tr key={u.id} className="hover:bg-white/5 transition-colors cursor-pointer" onClick={() => handleSelectUser(u)}>
                       <td className="px-2 py-4 font-mono text-blue-500 font-bold">{String(u.id).padStart(2, '0')}</td>
                       <td className="px-2 py-4 font-bold text-white text-sm truncate max-w-[120px]">
                         {u.name}
@@ -517,6 +520,19 @@ function App() {
             <span>CLUB</span>
           </div>
         </div>
+
+        {/* --- EVENT CLOSED MESSAGE --- */}
+        {IS_READ_ONLY && (
+          <div className="mx-4 mt-6 bg-[#0B1E38]/80 backdrop-blur border border-blue-500/30 p-4 rounded-xl text-center shadow-[0_0_20px_rgba(0,144,218,0.2)] animate-in fade-in slide-in-from-top-2 duration-1000">
+            <p className="text-[#0090DA] text-sm md:text-base font-bold mb-1">
+              Thank you for the great race!
+            </p>
+            <p className="text-white font-bold text-sm md:text-base leading-relaxed">
+              2026年大会は終了しました。<br />
+              また来年お会いしましょう！
+            </p>
+          </div>
+        )}
 
         {/* Rules Button Row */}
         <div className="flex justify-end mx-4 mt-2">
@@ -754,8 +770,8 @@ function App() {
                         type="number"
                         value={targetTime}
                         onChange={(e) => setTargetTime(e.target.value)}
-                        disabled={isLocked}
-                        className={`w-full text-5xl font-black text-center p-6 bg-[#051426] border-2 rounded-2xl outline-none transition-all font-mono text-white ${isLocked ? 'border-gray-700 text-gray-500' : (selectedParticipant.category === 'k' ? 'border-[#0090DA] focus:shadow-[0_0_20px_rgba(0,144,218,0.3)]' : 'border-[#00D060] focus:shadow-[0_0_20px_rgba(0,208,96,0.3)]')}`}
+                        disabled={IS_READ_ONLY || isLocked}
+                        className={`w-full text-5xl font-black text-center p-6 bg-[#051426] border-2 rounded-2xl outline-none transition-all font-mono text-white ${IS_READ_ONLY || isLocked ? 'border-gray-700 text-gray-500' : (selectedParticipant.category === 'k' ? 'border-[#0090DA] focus:shadow-[0_0_20px_rgba(0,144,218,0.3)]' : 'border-[#00D060] focus:shadow-[0_0_20px_rgba(0,208,96,0.3)]')}`}
                       />
                       <span className="absolute right-6 top-1/2 -translate-y-1/2 text-gray-600 font-bold text-sm tracking-widest">MIN</span>
                     </div>
@@ -776,6 +792,7 @@ function App() {
                               type="checkbox"
                               className="accent-red-500"
                               checked={resultTime === 'リタイア'}
+                              disabled={IS_READ_ONLY}
                               onChange={(e) => {
                                 setResultTime(e.target.checked ? 'リタイア' : '');
                               }}
@@ -790,8 +807,9 @@ function App() {
                               type="number"
                               value={resultTime}
                               onChange={(e) => setResultTime(e.target.value)}
-                              className="w-full text-4xl font-black text-center p-4 bg-black/50 border border-red-500/30 text-white rounded-xl outline-none focus:border-red-500 focus:shadow-[0_0_20px_rgba(239,68,68,0.3)] font-mono"
-                              autoFocus
+                              disabled={IS_READ_ONLY}
+                              className={`w-full text-4xl font-black text-center p-4 bg-black/50 border border-red-500/30 text-white rounded-xl outline-none focus:border-red-500 focus:shadow-[0_0_20px_rgba(239,68,68,0.3)] font-mono ${IS_READ_ONLY ? 'opacity-50' : ''}`}
+                              autoFocus={!IS_READ_ONLY}
                               placeholder="000"
                             />
                             <span className="absolute right-6 top-1/2 -translate-y-1/2 text-red-500/50 font-bold text-xs">MIN</span>
@@ -805,8 +823,8 @@ function App() {
                     </div>
                   )}
 
-                  {/* PIN Input for Target Mode */}
-                  {!isTargetExpired && (
+                  {/* PIN Input for Target Mode - HIDDEN IN READ ONLY */}
+                  {(!isTargetExpired && !IS_READ_ONLY) && (
                     <div className="mb-6">
                       <label className="text-xs text-[#0090DA] font-bold mb-2 block uppercase tracking-widest">
                         {selectedParticipant.pin ? 'ENTER PIN TO UPDATE (4 digits)' : 'SET PIN (4 digits)'}
@@ -829,27 +847,52 @@ function App() {
                     </div>
                   )}
 
-                  <button
-                    onClick={handleSaveClick}
-                    className={`w-full font-black py-5 px-6 rounded-xl shadow-lg transition-all active:scale-95 text-xl flex items-center justify-center gap-2 italic ${isTargetExpired
-                      ? 'bg-gradient-to-r from-red-600 to-red-500 text-white'
-                      : (selectedParticipant.category === 'k' ? 'bg-gradient-to-r from-[#0090DA] to-[#34B6F3] text-[#001026]' : 'bg-gradient-to-r from-[#00D060] to-[#40F080] text-[#002010]')
-                      }`}
-                  >
-                    <span>{isTargetExpired ? 'SAVE RESULT' : (selectedParticipant.pin ? 'UPDATE TARGET' : 'LOCK TARGET')}</span>
-                  </button>
+                  {!IS_READ_ONLY ? (
+                    <button
+                      onClick={handleSaveClick}
+                      className={`w-full font-black py-5 px-6 rounded-xl shadow-lg transition-all active:scale-95 text-xl flex items-center justify-center gap-2 italic ${isTargetExpired
+                        ? 'bg-gradient-to-r from-red-600 to-red-500 text-white'
+                        : (selectedParticipant.category === 'k' ? 'bg-gradient-to-r from-[#0090DA] to-[#34B6F3] text-[#001026]' : 'bg-gradient-to-r from-[#00D060] to-[#40F080] text-[#002010]')
+                        }`}
+                    >
+                      <span>{isTargetExpired ? 'SAVE RESULT' : (selectedParticipant.pin ? 'UPDATE TARGET' : 'LOCK TARGET')}</span>
+                    </button>
+                  ) : (
+                    <div className="text-center p-4 bg-white/5 rounded-xl border border-white/10">
+                      <p className="text-gray-400 font-bold mb-1">REGISTRATION CLOSED</p>
+                      <p className="text-xs text-gray-500">2026大会は終了しました。<br />THANK YOU FOR PARTICIPATING!</p>
+                    </div>
+                  )}
 
-                  {isTargetExpired && selectedParticipant.locked && !selectedParticipant.result_2026 && (
+                  {isTargetExpired && selectedParticipant.locked && !selectedParticipant.result_2026 && !IS_READ_ONLY && (
                     <div className="text-center mt-4">
                       <p className="text-yellow-500 text-sm animate-pulse">Waiting for Result Input...</p>
                     </div>
                   )}
+
+                  <div className="mt-6 text-center">
+                    <button
+                      onClick={handleCloseDetail}
+                      className="text-blue-400 hover:text-white text-sm font-bold underline decoration-blue-500/30 hover:decoration-white transition-all"
+                    >
+                      ← 一覧に戻る
+                    </button>
+                  </div>
 
                 </div>
               ) : (
                 <div className="p-6 bg-white/5 rounded-2xl text-center border border-white/10">
                   <p className="text-gray-400 font-medium mb-1">NO RACE ENTRY</p>
                   <p className="text-xs text-gray-500 uppercase tracking-widest">Status: {selectedParticipant.temp_2026}</p>
+
+                  <div className="mt-4 text-center">
+                    <button
+                      onClick={handleCloseDetail}
+                      className="text-blue-400 hover:text-white text-sm font-bold underline decoration-blue-500/30 hover:decoration-white transition-all"
+                    >
+                      ← 一覧に戻る
+                    </button>
+                  </div>
                 </div>
               )}
 

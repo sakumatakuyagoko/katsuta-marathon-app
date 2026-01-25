@@ -8,7 +8,7 @@ const SHEET_NAME = 'data';
 const HEADERS = [
     'id', 'name', 'category',
     '2019', '2020', '2023', '2024', '2025',
-    'temp_2026', // I列: 2026年 (既存データ?)
+    'temp_2026', // I列: 2026年 (参加意向)
     'average',   // J列
     'std_dev',   // K列: 標準偏差
     'prediction',// L列: 本誌予想
@@ -21,6 +21,44 @@ const HEADERS = [
 ];
 
 const CONFIG_SHEET_NAME = 'config';
+
+// ----------------------------------------------------------------------------
+//  ADMIN TOOL: RESET DATA FOR NEW EVENT
+//  この関数を手動実行すると、2026年用のデータ（目標・結果・暗証番号）がリセットされます。
+//  過去の履歴（2019-2025）や基本情報（名前・ID）は保持されます。
+// ----------------------------------------------------------------------------
+function reset2026Data() {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const sheet = ss.getSheetByName(SHEET_NAME);
+    const configSheet = ss.getSheetByName(CONFIG_SHEET_NAME);
+
+    if (!sheet) throw new Error("Data sheet not found");
+
+    const lastRow = sheet.getLastRow();
+    if (lastRow <= 1) return; // No data
+
+    // HEADERS定義に基づき、クリアするカラムのインデックスを特定 (1-based for getRange)
+    // status_2026(N) -> pin(R) までをクリアする
+    // HEADERS配列のインデックス:
+    // status_2026: 13 -> Column 14
+    // pin: 17 -> Column 18
+
+    const startCol = 14; // N列
+    const numCols = 5;   // N, O, P, Q, R (5列)
+
+    // データシートのクリア
+    // 2行目から最終行まで
+    sheet.getRange(2, startCol, lastRow - 1, numCols).clearContent();
+
+    // Configシートのクリア
+    if (configSheet) {
+        configSheet.clear();
+    }
+
+    console.log("2026 Data Reset Complete.");
+    return "Reset Complete";
+}
+
 
 function doGet(e) {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
